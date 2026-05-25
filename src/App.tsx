@@ -5,6 +5,7 @@ import LandingPage from './pages/LandingPage';
 import AuthPage from './pages/AuthPage';
 import Dashboard from './pages/Dashboard';
 import SessionPage from './pages/SessionPage';
+import GrammarDrillsPage from './pages/GrammarDrillsPage';
 import ProgressPage from './pages/ProgressPage';
 import AchievementsPage from './pages/AchievementsPage';
 import VocabularyPage from './pages/VocabularyPage';
@@ -15,7 +16,7 @@ import Navbar from './components/Navbar';
 import FloatingGradient from './components/ui/FloatingGradient';
 import type { SessionMode } from './types';
 
-type AppPage = 'landing' | 'auth' | 'dashboard' | 'session' | 'progress' | 'achievements' | 'vocabulary' | 'leaderboard' | 'friends' | 'settings';
+type AppPage = 'landing' | 'auth' | 'dashboard' | 'session' | 'grammar' | 'progress' | 'achievements' | 'vocabulary' | 'leaderboard' | 'friends' | 'settings';
 
 interface SessionConfig {
   mode: SessionMode;
@@ -55,15 +56,19 @@ function AppContent() {
     setPage('session');
   };
 
+  const startGrammarDrills = () => {
+    setPage('grammar');
+  };
+
   const handleNavNavigate = (navPage: 'dashboard' | 'progress' | 'achievements' | 'vocabulary' | 'friends' | 'settings' | 'leaderboard') => {
     setPage(navPage);
   };
 
-  const isAppPage = user && page !== 'session' && page !== 'landing' && page !== 'auth';
+  const isAppPage = user && page !== 'session' && page !== 'landing' && page !== 'auth' && page !== 'grammar';
 
   return (
     <div className="min-h-screen bg-[#090e1a] text-white">
-      {!['landing', 'auth', 'session'].includes(page) && <FloatingGradient />}
+      {!['landing', 'auth', 'session', 'grammar'].includes(page) && <FloatingGradient />}
 
       {isAppPage && (
         <Navbar
@@ -87,7 +92,7 @@ function AppContent() {
 
         {page === 'dashboard' && user && (
           <motion.div key="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <Dashboard onStartSession={startSession} />
+            <Dashboard onStartSession={startSession} onStartGrammar={startGrammarDrills} />
           </motion.div>
         )}
 
@@ -101,6 +106,12 @@ function AppContent() {
               difficulty={sessionConfig.difficulty}
               onExit={() => setPage('dashboard')}
             />
+          </motion.div>
+        )}
+
+        {page === 'grammar' && user && (
+          <motion.div key="grammar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <GrammarDrillsPage onBack={() => setPage('dashboard')} />
           </motion.div>
         )}
 

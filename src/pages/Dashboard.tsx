@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Play, ArrowRight, Zap, Flame, Target, Clock, Trophy, Star,
-  TrendingUp, MessageSquare, Brain, Mic, Award
+  TrendingUp, MessageSquare, Brain, Mic, Award, BookOpen
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -18,22 +18,24 @@ interface ModeCard {
   description: string;
   color: string;
   badge?: string;
+  special?: 'grammar' | 'vocab';
 }
 
 const MODE_CARDS: ModeCard[] = [
   { mode: 'speaking', label: 'Speaking Coach', description: 'Practice real conversations with instant feedback', color: 'from-blue-500 to-cyan-500', badge: 'Recommended' },
   { mode: 'interview', label: 'Interview Prep', description: 'Simulate job interviews with detailed scoring', color: 'from-emerald-500 to-teal-500', badge: 'Popular' },
-  { mode: 'vocab', label: 'Learn Words', description: 'Expand vocabulary with smart flashcards', color: 'from-violet-500 to-purple-500', badge: 'New' },
-  { mode: 'grammar_challenge', label: 'Grammar Drills', description: 'Interactive grammar exercises', color: 'from-rose-500 to-pink-500' },
+  { mode: 'vocab', label: 'Flashcard Mode', description: '3D flashcards with swipe gestures', color: 'from-violet-500 to-purple-500', badge: 'New', special: 'vocab' },
+  { mode: 'grammar_challenge', label: 'Grammar Drills', description: 'Duolingo-style word puzzles', color: 'from-rose-500 to-pink-500', badge: 'Fun', special: 'grammar' },
   { mode: 'ielts', label: 'IELTS Prep', description: 'Full IELTS speaking test simulation', color: 'from-amber-500 to-orange-500' },
   { mode: 'listening', label: 'Listening Lab', description: 'Improve comprehension skills', color: 'from-sky-500 to-blue-500' },
 ];
 
 interface Props {
   onStartSession: (mode: SessionMode, options?: { topic?: string; role?: string; company?: string; difficulty?: string }) => void;
+  onStartGrammar?: () => void;
 }
 
-export default function Dashboard({ onStartSession }: Props) {
+export default function Dashboard({ onStartSession, onStartGrammar }: Props) {
   const { profile, refreshProfile } = useAuth();
   const [recentSessions, setRecentSessions] = useState<Session[]>([]);
   const [activity, setActivity] = useState<DailyActivity[]>([]);
@@ -102,7 +104,9 @@ export default function Dashboard({ onStartSession }: Props) {
 
   const handleStart = () => {
     if (!selectedMode) return;
-    if (selectedMode.mode === 'interview') {
+    if (selectedMode.special === 'grammar') {
+      onStartGrammar?.();
+    } else if (selectedMode.mode === 'interview') {
       onStartSession('interview', { role: interviewRole, company: interviewCompany, difficulty });
     } else {
       onStartSession(selectedMode.mode, { difficulty });
