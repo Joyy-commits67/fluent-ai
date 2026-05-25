@@ -4,7 +4,7 @@ import { Search, Star, Trash2, Volume2, ChevronLeft, ChevronRight, RotateCcw, Bo
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { generateWordDefinition } from '../lib/gemini';
-import { calculateNextReview } from '../lib/xp';
+import { calculateNextReview, XP_PER_WORD_LEARNED } from '../lib/xp';
 import type { VocabularyWord } from '../types';
 
 type ViewMode = 'library' | 'flashcards' | 'quiz';
@@ -112,10 +112,25 @@ export default function VocabularyPage() {
 
     if (data) {
       setWords((prev) => [data as VocabularyWord, ...prev]);
-      await supabase
+
+      // Update profile with new word count, XP, and league XP
+      const { data: profileData } = await supabase
         .from('profiles')
-        .update({ total_words_learned: (profile.total_words_learned ?? 0) + 1 })
-        .eq('id', profile.id);
+        .select('xp, league_xp, total_words_learned')
+        .eq('id', profile.id)
+        .maybeSingle();
+
+      if (profileData) {
+        await supabase
+          .from('profiles')
+          .update({
+            xp: profileData.xp + XP_PER_WORD_LEARNED,
+            league_xp: profileData.league_xp + XP_PER_WORD_LEARNED,
+            total_words_learned: (profileData.total_words_learned ?? 0) + 1,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', profile.id);
+      }
       refreshProfile();
     }
 

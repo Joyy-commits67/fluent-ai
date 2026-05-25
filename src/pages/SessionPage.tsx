@@ -8,7 +8,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { callGemini, analyzeGrammar, generateInterviewReport, GeminiMessage } from '../lib/gemini';
 import { speechManager } from '../lib/speech';
-import { useGamification } from '../hooks/useGamification';
 import { getModeLabel, XP_PER_MESSAGE, XP_PER_SESSION } from '../lib/xp';
 import AIAvatar from '../components/ui/AIAvatar';
 import VoiceWave from '../components/ui/VoiceWave';
@@ -86,7 +85,6 @@ function getOpeningMessage(mode: SessionMode, role: string, company: string): st
 
 export default function SessionPage({ mode, topic, role = '', company = '', difficulty = 'intermediate', onExit }: Props) {
   const { user, profile, refreshProfile } = useAuth();
-  const { completeSession } = useGamification(user?.id);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isListening, setIsListening] = useState(false);
@@ -262,13 +260,61 @@ export default function SessionPage({ mode, topic, role = '', company = '', diff
         grammar_explanation: '',
       });
 
-      // Award XP
+      // Award XP and update weekly league xp
       setLastXpEarned(XP_PER_MESSAGE);
       setLastXpMessage('Great response!');
       setShowXpPopup(true);
       setTimeout(() => setShowXpPopup(false), 1500);
 
-      await supabase.rpc('increment_messages', { p_user_id: user.id }).catch(() => {});
+      // Update both total XP and weekly league XP
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('xp, league_xp, total_messages')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (profileData) {
+        await supabase
+          .from('profiles')
+          .update({
+            xp: profileData.xp + XP_PER_MESSAGE,
+            league_xp: profileData.league_xp + XP_PER_MESSAGE,
+            total_messages: (profileData.total_messages ?? 0) + 1,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', user.id);
+      }
+
+      // Update daily activity
+      const today = new Date().toISOString().split('T')[0];
+      const { data: existingActivity } = await supabase
+        .from('daily_activity')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('activity_date', today)
+        .maybeSingle();
+
+      if (existingActivity) {
+        await supabase
+          .from('daily_activity')
+          .update({
+            messages_count: existingActivity.messages_count + 1,
+            xp_earned: existingActivity.xp_earned + XP_PER_MESSAGE,
+          })
+          .eq('id', existingActivity.id);
+      } else {
+        await supabase.from('daily_activity').insert({
+          user_id: user.id,
+          activity_date: today,
+          messages_count: 1,
+          xp_earned: XP_PER_MESSAGE,
+          sessions_count: 0,
+          minutes_practiced: 0,
+          words_learned: 0,
+          grammar_correct: 0,
+          grammar_total: 0,
+        });
+      }
     }
 
     // Build history
@@ -368,7 +414,37 @@ export default function SessionPage({ mode, topic, role = '', company = '', diff
       })
       .eq('id', sessionId);
 
-    await completeSession(sessionId, Math.round((Date.now() - sessionStart) / 1000));
+    // Update profile XP and league XP
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('xp, league_xp, total_sessions, streak, longest_streak, last_streak_date')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profileData) {
+      const today = new Date().toISOString().split('T')[0];
+      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+      const lastDate = profileData.last_streak_date;
+
+      let newStreak = profileData.streak ?? 0;
+      if (lastDate === yesterday) newStreak += 1;
+      else if (lastDate !== today) newStreak = 1;
+
+      await supabase
+        .from('profiles')
+        .update({
+          xp: profileData.xp + XP_PER_SESSION,
+          league_xp: profileData.league_xp + XP_PER_SESSION,
+          total_sessions: (profileData.total_sessions ?? 0) + 1,
+          streak: newStreak,
+          longest_streak: Math.max(newStreak, profileData.longest_streak ?? 0),
+          last_streak_date: today,
+          last_session_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id);
+    }
+
     await refreshProfile();
     setShowReport(true);
   }
@@ -392,7 +468,37 @@ export default function SessionPage({ mode, topic, role = '', company = '', diff
       })
       .eq('id', sessionId);
 
-    await completeSession(sessionId, duration);
+    // Update profile XP and league XP
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('xp, league_xp, total_sessions, streak, longest_streak, last_streak_date')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profileData) {
+      const today = new Date().toISOString().split('T')[0];
+      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+      const lastDate = profileData.last_streak_date;
+
+      let newStreak = profileData.streak ?? 0;
+      if (lastDate === yesterday) newStreak += 1;
+      else if (lastDate !== today) newStreak = 1;
+
+      await supabase
+        .from('profiles')
+        .update({
+          xp: profileData.xp + XP_PER_SESSION,
+          league_xp: profileData.league_xp + XP_PER_SESSION,
+          total_sessions: (profileData.total_sessions ?? 0) + 1,
+          streak: newStreak,
+          longest_streak: Math.max(newStreak, profileData.longest_streak ?? 0),
+          last_streak_date: today,
+          last_session_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id);
+    }
+
     await refreshProfile();
 
     setLastXpEarned(XP_PER_SESSION);

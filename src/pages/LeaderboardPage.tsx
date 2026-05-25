@@ -1,58 +1,77 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Crown, Medal, Trophy, Flame, ChevronUp, ChevronDown, Sparkles } from 'lucide-react';
+import { Crown, Medal, Trophy, Flame, ChevronUp, ChevronDown, Sparkles, RefreshCw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { LEAGUES, LEAGUE_ICONS } from '../lib/xp';
-import type { LeaderboardEntry, Profile, League } from '../types';
+import type { LeaderboardEntry, League } from '../types';
 
 export default function LeaderboardPage() {
   const { profile, refreshProfile } = useAuth();
   const [currentLeague, setCurrentLeague] = useState<League>('bronze');
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [timeframe, setTimeframe] = useState<'weekly' | 'all-time'>('weekly');
 
-  const fetchLeaderboard = useCallback(async () => {
+  const fetchLeaderboard = useCallback(async (isRefresh = false) => {
     if (!profile) return;
-    setLoading(true);
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
 
-    // Get all profiles in the same league
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, display_name, avatar_url, league_xp, xp, league, streak')
-      .eq('league', currentLeague)
-      .order(timeframe === 'weekly' ? 'league_xp' : 'xp', { ascending: false })
-      .limit(30);
+    try {
+      // For weekly, use league_xp; for all-time, use total xp
+      const orderField = timeframe === 'weekly' ? 'league_xp' : 'xp';
 
-    if (error) {
-      console.error('Error fetching leaderboard:', error);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, display_name, avatar_url, league_xp, xp, league, streak')
+        .eq('league', currentLeague)
+        .order(orderField, { ascending: false })
+        .limit(30);
+
+      if (error) {
+        console.error('Error fetching leaderboard:', error);
+        throw error;
+      }
+
+      const entries: LeaderboardEntry[] = (data || []).map((p, i) => ({
+        rank: i + 1,
+        user_id: p.id,
+        display_name: p.display_name || 'Anonymous',
+        avatar_url: p.avatar_url || '',
+        xp: timeframe === 'weekly' ? p.league_xp : p.xp,
+        is_current_user: p.id === profile.id,
+      }));
+
+      setLeaderboard(entries);
+    } catch (err) {
+      console.error('Leaderboard fetch error:', err);
+    } finally {
       setLoading(false);
-      return;
+      setRefreshing(false);
     }
-
-    const entries: LeaderboardEntry[] = (data || []).map((p, i) => ({
-      rank: i + 1,
-      user_id: p.id,
-      display_name: p.display_name || 'Anonymous',
-      avatar_url: p.avatar_url || '',
-      xp: timeframe === 'weekly' ? p.league_xp : p.xp,
-      is_current_user: p.id === profile.id,
-    }));
-
-    setLeaderboard(entries);
-    setLoading(false);
   }, [profile, currentLeague, timeframe]);
 
+  // Fetch on mount and when dependencies change
   useEffect(() => {
     if (profile?.league) {
       setCurrentLeague(profile.league as League);
     }
-  }, [profile]);
+  }, [profile?.league]);
 
   useEffect(() => {
-    fetchLeaderboard();
-  }, [fetchLeaderboard]);
+    if (profile) {
+      fetchLeaderboard();
+    }
+  }, [fetchLeaderboard, profile]);
+
+  // Refresh user profile when entering page
+  useEffect(() => {
+    if (profile) {
+      refreshProfile();
+    }
+  }, []);
 
   const leagueIndex = LEAGUES.indexOf(currentLeague);
   const canPromote = leagueIndex < LEAGUES.length - 1;
@@ -75,6 +94,14 @@ export default function LeaderboardPage() {
     }
   };
 
+  const handleRefresh = () => {
+    refreshProfile();
+    fetchLeaderboard(true);
+  };
+
+  // Calculate user's weekly XP from profile
+  const userWeeklyXp = profile?.league_xp ?? 0;
+
   return (
     <div className="min-h-screen bg-[#090e1a] pt-14">
       <div className="max-w-2xl mx-auto px-4 py-8">
@@ -92,7 +119,7 @@ export default function LeaderboardPage() {
           <button
             onClick={() => changeLeague('down')}
             disabled={!canDemote}
-            className={`p-2 rounded-lg ${canDemote ? 'hover:bg-white/10' : 'opacity-30'}`}
+            className={`p-2 rounded-lg transition-colors ${canDemote ? 'hover:bg-white/10 text-white' : 'opacity-30 text-white/30'}`}
           >
             <ChevronDown size={20} />
           </button>
@@ -113,20 +140,20 @@ export default function LeaderboardPage() {
           <button
             onClick={() => changeLeague('up')}
             disabled={!canPromote}
-            className={`p-2 rounded-lg ${canPromote ? 'hover:bg-white/10' : 'opacity-30'}`}
+            className={`p-2 rounded-lg transition-colors ${canPromote ? 'hover:bg-white/10 text-white' : 'opacity-30 text-white/30'}`}
           >
             <ChevronUp size={20} />
           </button>
         </div>
 
         {/* Timeframe toggle */}
-        <div className="flex justify-center mb-6">
+        <div className="flex justify-center gap-2 mb-6">
           <div className="flex bg-white/5 rounded-xl p-1">
             {(['weekly', 'all-time'] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTimeframe(t)}
-                className={`px-5 py-2 rounded-lg text-sm font-semibold capitalize ${
+                className={`px-5 py-2 rounded-lg text-sm font-semibold capitalize transition-all ${
                   timeframe === t ? 'bg-white/10 text-white' : 'text-white/50'
                 }`}
               >
@@ -134,25 +161,41 @@ export default function LeaderboardPage() {
               </button>
             ))}
           </div>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="p-2 bg-white/5 rounded-xl hover:bg-white/10 transition-colors"
+          >
+            <RefreshCw size={18} className={`${refreshing ? 'animate-spin' : ''} text-white/60`} />
+          </motion.button>
         </div>
 
-        {/* Your position */}
-        {currentUserEntry && (
+        {/* Your position - show immediately after profile loads */}
+        {profile && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             className="mb-6 p-4 bg-gradient-to-r from-blue-500/15 to-cyan-500/10 border border-blue-500/20 rounded-2xl"
           >
             <div className="flex items-center gap-4">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold ${getRankStyle(userRank)}`}>
-                {userRank}
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold ${getRankStyle(userRank || 1)}`}>
+                {userRank || '-'}
               </div>
-              <div className="flex-1">
-                <div className="font-semibold">Your Position</div>
-                <div className="text-xs text-white/50">{currentUserEntry.xp} XP this {timeframe === 'weekly' ? 'week' : 'time'}</div>
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-sm font-bold">
+                {profile.display_name?.[0]?.toUpperCase() || 'U'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold">{profile.display_name || 'You'}</div>
+                <div className="text-xs text-white/50">
+                  {timeframe === 'weekly' ? userWeeklyXp : profile.xp} XP this {timeframe === 'weekly' ? 'week' : 'time'}
+                </div>
               </div>
               <div className="text-right">
-                <div className="text-lg font-bold text-blue-400">{currentUserEntry.xp}</div>
+                <div className="text-lg font-bold text-blue-400">
+                  {timeframe === 'weekly' ? userWeeklyXp : profile.xp}
+                </div>
                 <div className="text-xs text-white/40">XP</div>
               </div>
             </div>
@@ -183,7 +226,7 @@ export default function LeaderboardPage() {
               <p>No one in this league yet. Be the first!</p>
             </div>
           ) : (
-            leaderboard.slice(0, 15).map((entry, i) => (
+            leaderboard.map((entry, i) => (
               <motion.div
                 key={entry.user_id}
                 initial={{ opacity: 0, x: -10 }}
@@ -235,7 +278,7 @@ export default function LeaderboardPage() {
             <li>- Earn XP to climb the leaderboard each week</li>
             <li>- Top 5 learners get promoted to the next league</li>
             <li>- Bottom 5 learners may be demoted</li>
-            <li>- Compete with friends and other learners</li>
+            <li>- Weekly XP resets at the start of each week</li>
           </ul>
         </div>
       </div>
