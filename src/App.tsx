@@ -5,6 +5,8 @@ import LandingPage from './pages/LandingPage';
 import AuthPage from './pages/AuthPage';
 import Dashboard from './pages/Dashboard';
 import SessionPage from './pages/SessionPage';
+import InterviewPrepPage from './pages/InterviewPrepPage';
+import IELTSPage from './pages/IELTSPage';
 import GrammarDrillsPage from './pages/GrammarDrillsPage';
 import ProgressPage from './pages/ProgressPage';
 import AchievementsPage from './pages/AchievementsPage';
@@ -16,7 +18,7 @@ import Navbar from './components/Navbar';
 import FloatingGradient from './components/ui/FloatingGradient';
 import type { SessionMode } from './types';
 
-type AppPage = 'landing' | 'auth' | 'dashboard' | 'session' | 'grammar' | 'progress' | 'achievements' | 'vocabulary' | 'leaderboard' | 'friends' | 'settings';
+type AppPage = 'landing' | 'auth' | 'dashboard' | 'session' | 'interview' | 'ielts' | 'grammar' | 'progress' | 'achievements' | 'vocabulary' | 'leaderboard' | 'friends' | 'settings';
 
 interface SessionConfig {
   mode: SessionMode;
@@ -52,6 +54,21 @@ function AppContent() {
   }
 
   const startSession = (mode: SessionMode, options?: { topic?: string; role?: string; company?: string; difficulty?: string }) => {
+    // Special routing for interview and ielts
+    if (mode === 'interview') {
+      setSessionConfig({ mode, ...options });
+      setPage('interview');
+      return;
+    }
+    if (mode === 'ielts') {
+      setPage('ielts');
+      return;
+    }
+    if (mode === 'grammar_challenge') {
+      setPage('grammar');
+      return;
+    }
+
     setSessionConfig({ mode, ...options });
     setPage('session');
   };
@@ -64,11 +81,11 @@ function AppContent() {
     setPage(navPage);
   };
 
-  const isAppPage = user && page !== 'session' && page !== 'landing' && page !== 'auth' && page !== 'grammar';
+  const isAppPage = user && page !== 'session' && page !== 'landing' && page !== 'auth' && page !== 'grammar' && page !== 'interview' && page !== 'ielts';
 
   return (
     <div className="min-h-screen bg-[#090e1a] text-white">
-      {!['landing', 'auth', 'session', 'grammar'].includes(page) && <FloatingGradient />}
+      {!['landing', 'auth', 'session', 'grammar', 'interview', 'ielts'].includes(page) && <FloatingGradient />}
 
       {isAppPage && (
         <Navbar
@@ -106,6 +123,23 @@ function AppContent() {
               difficulty={sessionConfig.difficulty}
               onExit={() => setPage('dashboard')}
             />
+          </motion.div>
+        )}
+
+        {page === 'interview' && sessionConfig && (
+          <motion.div key="interview" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <InterviewPrepPage
+              role={sessionConfig.role || 'Software Engineer'}
+              company={sessionConfig.company || ''}
+              difficulty={sessionConfig.difficulty || 'intermediate'}
+              onExit={() => setPage('dashboard')}
+            />
+          </motion.div>
+        )}
+
+        {page === 'ielts' && user && (
+          <motion.div key="ielts" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <IELTSPage onExit={() => setPage('dashboard')} />
           </motion.div>
         )}
 
