@@ -181,12 +181,13 @@ function getFallbackQuestions(topic: string, difficulty: string, count: number):
   return shuffled.slice(0, Math.min(count, shuffled.length));
 }
 
-// Normalize string for comparison: trim, collapse whitespace, lowercase
+// Normalize string for comparison: strip punctuation, trim, collapse whitespace, lowercase
 function normalizeString(str: string): string {
   return str
-    .trim()
-    .replace(/\s+/g, ' ')  // Collapse multiple spaces to single space
-    .toLowerCase();
+    .toLowerCase()
+    .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?!]/g, '') // Remove all punctuation
+    .replace(/\s+/g, ' ') // Collapse multiple spaces to single space
+    .trim();
 }
 
 interface Props {

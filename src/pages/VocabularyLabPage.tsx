@@ -10,9 +10,8 @@ import { callGemini } from '../lib/gemini';
 import Confetti from '../components/ui/Confetti';
 import XPPopup from '../components/ui/XPPopup';
 import { XP_PER_WORD_LEARNED } from '../lib/xp';
-import type { VocabularyWord } from '../types';
 
-type ChallengeType = 'type-word' | 'pick-definition' | 'fill-blanks' | 'match-sentence';
+type ChallengeType = 'type-word' | 'pick-definition' | 'fill-blanks';
 
 interface NewWordData {
   word: string;
@@ -29,6 +28,10 @@ interface Challenge {
   instruction: string;
   options?: string[];
   correctAnswer: string;
+  // For fill-blanks: store the missing letters
+  missingLetters?: string;
+  prefix?: string;
+  suffix?: string;
   hint?: string;
 }
 
@@ -49,6 +52,7 @@ Requirements:
 - DO NOT use common words everyone knows
 - Choose words from topics: business, technology, travel, health, education, environment
 - Make it educational and practical
+- Word must be at least 6 letters long
 
 Respond ONLY in this exact JSON format:
 {
@@ -64,10 +68,14 @@ Respond ONLY in this exact JSON format:
   try {
     const response = await callGemini([{ role: 'user', parts: [{ text: prompt }] }]);
     const cleaned = response.replace(/```json|```/g, '').trim();
-    return JSON.parse(cleaned);
+    const parsed = JSON.parse(cleaned);
+    // Ensure word is valid
+    if (!parsed.word || parsed.word.length < 4) {
+      throw new Error('Word too short');
+    }
+    return parsed;
   } catch (err) {
     console.error('Failed to generate word:', err);
-    // Return fallback word
     return {
       word: 'serendipity',
       meaning: 'The occurrence of happy events by chance',
@@ -82,13 +90,14 @@ Respond ONLY in this exact JSON format:
 
 async function generateChallenges(wordData: NewWordData): Promise<Challenge[]> {
   const challenges: Challenge[] = [];
+  const word = wordData.word.toLowerCase();
 
   // Challenge 1: Type the word
   challenges.push({
     type: 'type-word',
     instruction: `Type the word: "${wordData.word}"`,
-    correctAnswer: wordData.word,
-    hint: `It starts with "${wordData.word[0]}" and has ${wordData.word.length} letters`,
+    correctAnswer: word,
+    hint: `It starts with "${word[0].toUpperCase()}" and has ${word.length} letters`,
   });
 
   // Challenge 2: Pick the correct definition
@@ -104,17 +113,24 @@ async function generateChallenges(wordData: NewWordData): Promise<Challenge[]> {
     correctAnswer: wordData.meaning,
   });
 
-  // Challenge 3: Fill in the blanks
-  const lettersToShow = Math.floor(wordData.word.length / 3);
-  const displayWord = wordData.word
-    .split('')
-    .map((char, i) => (i < lettersToShow || i >= wordData.word.length - lettersToShow ? char : '_'))
-    .join('');
+  // Challenge 3: Fill in the blanks - calculate missing section
+  const totalLength = word.length;
+  const lettersToShow = Math.ceil(totalLength / 4); // Show ~25% at start and end
+
+  const prefix = word.substring(0, lettersToShow);
+  const suffix = word.substring(totalLength - lettersToShow);
+  const middle = word.substring(lettersToShow, totalLength - lettersToShow);
+
+  const displayWord = prefix + '_'.repeat(middle.length) + suffix;
+
   challenges.push({
     type: 'fill-blanks',
     instruction: `Fill in the blanks: ${displayWord}`,
-    correctAnswer: wordData.word,
-    hint: `Definition: ${wordData.meaning}`,
+    correctAnswer: word,
+    missingLetters: middle,
+    prefix: prefix,
+    suffix: suffix,
+    hint: `Type the ${middle.length} missing letters. Definition: ${wordData.meaning}`,
   });
 
   return challenges;
@@ -182,16 +198,30 @@ export default function VocabularyLabPage({ onBack }: Props) {
     const currentChallenge = challenges[challengeIndex];
     if (!currentChallenge) return;
 
-    let answer: string;
-    if (currentChallenge.type === 'pick-definition') {
-      answer = selectedOption || '';
-    } else {
-      answer = userInput.trim().toLowerCase();
-    }
+    let correct = false;
 
-    const correct = currentChallenge.type === 'pick-definition'
-      ? answer === currentChallenge.correctAnswer
-      : answer === currentChallenge.correctAnswer.toLowerCase();
+    if (currentChallenge.type === 'pick-definition') {
+      // Multiple choice - direct string comparison
+      correct = (selectedOption || '') === currentChallenge.correctAnswer;
+    } else if (currentChallenge.type === 'fill-blanks') {
+      // Fill in blanks - user types ONLY the missing letters
+      const userMissingLetters = userInput.trim().toLowerCase();
+      const expectedMissingLetters = currentChallenge.missingLetters || '';
+
+      // Option 1: Check if user typed just the missing letters
+      if (userMissingLetters === expectedMissingLetters) {
+        correct = true;
+      } else {
+        // Option 2: Reconstruct full word and compare
+        const prefix = currentChallenge.prefix || '';
+        const suffix = currentChallenge.suffix || '';
+        const reconstructedWord = (prefix + userMissingLetters + suffix).toLowerCase();
+        correct = reconstructedWord === currentChallenge.correctAnswer.toLowerCase();
+      }
+    } else {
+      // Type the word - direct comparison
+      correct = userInput.trim().toLowerCase() === currentChallenge.correctAnswer.toLowerCase();
+    }
 
     setIsCorrect(correct);
 
@@ -210,7 +240,6 @@ export default function VocabularyLabPage({ onBack }: Props) {
       setIsCorrect(null);
       setShowHint(false);
     } else {
-      // Word learned!
       completeWord();
     }
   };
@@ -245,7 +274,7 @@ export default function VocabularyLabPage({ onBack }: Props) {
           antonyms: [],
           difficulty: currentWord.difficulty,
           learned_at: new Date().toISOString(),
-          next_review_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Review tomorrow
+          next_review_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           is_favorite: false,
           times_reviewed: 1,
           correct_count: 1,
@@ -536,7 +565,7 @@ export default function VocabularyLabPage({ onBack }: Props) {
                       value={userInput}
                       onChange={(e) => setUserInput(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && checkAnswer()}
-                      placeholder="Type your answer..."
+                      placeholder={currentChallenge.type === 'fill-blanks' ? 'Type the missing letters...' : 'Type your answer...'}
                       disabled={isCorrect !== null}
                       autoFocus
                       className={`w-full px-6 py-4 bg-white/5 border-2 rounded-xl text-center text-lg font-semibold focus:outline-none transition-all ${
@@ -547,9 +576,11 @@ export default function VocabularyLabPage({ onBack }: Props) {
                           : 'border-white/20 focus:border-violet-500'
                       }`}
                     />
-                    <div className="text-center text-white/40 text-sm">
-                      Word: <span className="text-violet-400 font-bold">{currentWord.word}</span>
-                    </div>
+                    {currentChallenge.type === 'fill-blanks' && (
+                      <div className="text-center text-white/40 text-sm">
+                        Type the <span className="text-amber-400 font-bold">{currentChallenge.missingLetters?.length}</span> missing letters
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -574,7 +605,17 @@ export default function VocabularyLabPage({ onBack }: Props) {
                     </div>
                     {!isCorrect && (
                       <p className="text-sm text-white/60 mt-2">
-                        The correct answer is: <span className="text-white font-semibold">{currentChallenge.correctAnswer}</span>
+                        {currentChallenge.type === 'fill-blanks' ? (
+                          <>
+                            The missing letters are: <span className="text-white font-semibold">{currentChallenge.missingLetters}</span>
+                            <br />
+                            Full word: <span className="text-violet-400 font-semibold">{currentChallenge.correctAnswer}</span>
+                          </>
+                        ) : (
+                          <>
+                            The correct answer is: <span className="text-white font-semibold">{currentChallenge.correctAnswer}</span>
+                          </>
+                        )}
                       </p>
                     )}
                   </motion.div>
