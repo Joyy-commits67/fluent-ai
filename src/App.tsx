@@ -8,6 +8,7 @@ import SessionPage from './pages/SessionPage';
 import InterviewPrepPage from './pages/InterviewPrepPage';
 import IELTSPage from './pages/IELTSPage';
 import GrammarDrillsPage from './pages/GrammarDrillsPage';
+import VocabularyLabPage from './pages/VocabularyLabPage';
 import ProgressPage from './pages/ProgressPage';
 import AchievementsPage from './pages/AchievementsPage';
 import VocabularyPage from './pages/VocabularyPage';
@@ -18,7 +19,7 @@ import Navbar from './components/Navbar';
 import FloatingGradient from './components/ui/FloatingGradient';
 import type { SessionMode } from './types';
 
-type AppPage = 'landing' | 'auth' | 'dashboard' | 'session' | 'interview' | 'ielts' | 'grammar' | 'progress' | 'achievements' | 'vocabulary' | 'leaderboard' | 'friends' | 'settings';
+type AppPage = 'landing' | 'auth' | 'dashboard' | 'session' | 'interview' | 'ielts' | 'grammar' | 'vocablab' | 'progress' | 'achievements' | 'vocabulary' | 'leaderboard' | 'friends' | 'settings';
 
 interface SessionConfig {
   mode: SessionMode;
@@ -77,15 +78,19 @@ function AppContent() {
     setPage('grammar');
   };
 
+  const startVocabLab = () => {
+    setPage('vocablab');
+  };
+
   const handleNavNavigate = (navPage: 'dashboard' | 'progress' | 'achievements' | 'vocabulary' | 'friends' | 'settings' | 'leaderboard') => {
     setPage(navPage);
   };
 
-  const isAppPage = user && page !== 'session' && page !== 'landing' && page !== 'auth' && page !== 'grammar' && page !== 'interview' && page !== 'ielts';
+  const isAppPage = user && page !== 'session' && page !== 'landing' && page !== 'auth' && page !== 'grammar' && page !== 'interview' && page !== 'ielts' && page !== 'vocablab';
 
   return (
     <div className="min-h-screen bg-[#090e1a] text-white">
-      {!['landing', 'auth', 'session', 'grammar', 'interview', 'ielts'].includes(page) && <FloatingGradient />}
+      {!['landing', 'auth', 'session', 'grammar', 'interview', 'ielts', 'vocablab'].includes(page) && <FloatingGradient />}
 
       {isAppPage && (
         <Navbar
@@ -109,7 +114,7 @@ function AppContent() {
 
         {page === 'dashboard' && user && (
           <motion.div key="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <Dashboard onStartSession={startSession} onStartGrammar={startGrammarDrills} />
+            <Dashboard onStartSession={startSession} onStartGrammar={startGrammarDrills} onStartVocabLab={startVocabLab} />
           </motion.div>
         )}
 
@@ -146,6 +151,12 @@ function AppContent() {
         {page === 'grammar' && user && (
           <motion.div key="grammar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <GrammarDrillsPage onBack={() => setPage('dashboard')} />
+          </motion.div>
+        )}
+
+        {page === 'vocablab' && user && (
+          <motion.div key="vocablab" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <VocabularyLabPage onBack={() => setPage('dashboard')} />
           </motion.div>
         )}
 

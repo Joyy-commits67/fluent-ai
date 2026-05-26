@@ -18,13 +18,13 @@ interface ModeCard {
   description: string;
   color: string;
   badge?: string;
-  special?: 'grammar' | 'vocab';
+  special?: 'grammar' | 'vocablab';
 }
 
 const MODE_CARDS: ModeCard[] = [
   { mode: 'speaking', label: 'Speaking Coach', description: 'Practice real conversations with instant feedback', color: 'from-blue-500 to-cyan-500', badge: 'Recommended' },
   { mode: 'interview', label: 'Interview Prep', description: 'Simulate job interviews with detailed scoring', color: 'from-emerald-500 to-teal-500', badge: 'Popular' },
-  { mode: 'vocab', label: 'Flashcard Mode', description: '3D flashcards with swipe gestures', color: 'from-violet-500 to-purple-500', badge: 'New', special: 'vocab' },
+  { mode: 'vocab', label: 'Vocabulary Lab', description: 'Learn new words with Duolingo-style challenges', color: 'from-violet-500 to-purple-500', badge: 'New', special: 'vocablab' },
   { mode: 'grammar_challenge', label: 'Grammar Drills', description: 'Duolingo-style word puzzles', color: 'from-rose-500 to-pink-500', badge: 'Fun', special: 'grammar' },
   { mode: 'ielts', label: 'IELTS Prep', description: 'Full IELTS speaking test simulation', color: 'from-amber-500 to-orange-500' },
   { mode: 'listening', label: 'Listening Lab', description: 'Improve comprehension skills', color: 'from-sky-500 to-blue-500' },
@@ -33,9 +33,10 @@ const MODE_CARDS: ModeCard[] = [
 interface Props {
   onStartSession: (mode: SessionMode, options?: { topic?: string; role?: string; company?: string; difficulty?: string }) => void;
   onStartGrammar?: () => void;
+  onStartVocabLab?: () => void;
 }
 
-export default function Dashboard({ onStartSession, onStartGrammar }: Props) {
+export default function Dashboard({ onStartSession, onStartGrammar, onStartVocabLab }: Props) {
   const { profile, refreshProfile } = useAuth();
   const [recentSessions, setRecentSessions] = useState<Session[]>([]);
   const [activity, setActivity] = useState<DailyActivity[]>([]);
@@ -106,6 +107,8 @@ export default function Dashboard({ onStartSession, onStartGrammar }: Props) {
     if (!selectedMode) return;
     if (selectedMode.special === 'grammar') {
       onStartGrammar?.();
+    } else if (selectedMode.special === 'vocablab') {
+      onStartVocabLab?.();
     } else if (selectedMode.mode === 'interview') {
       onStartSession('interview', { role: interviewRole, company: interviewCompany, difficulty });
     } else {
