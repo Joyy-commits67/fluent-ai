@@ -5,10 +5,13 @@ import {
   Volume2, Trophy, Zap, RefreshCw
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useHearts } from '../hooks/useHearts';
 import { supabase } from '../lib/supabase';
 import { callGemini } from '../lib/gemini';
 import Confetti from '../components/ui/Confetti';
 import XPPopup from '../components/ui/XPPopup';
+import HeartsBar from '../components/ui/HeartsBar';
+import RefillHeartsModal from '../components/ui/RefillHeartsModal';
 
 interface GrammarQuestion {
   id: string;
@@ -196,6 +199,10 @@ interface Props {
 
 export default function GrammarDrillsPage({ onBack }: Props) {
   const { user, profile, refreshProfile } = useAuth();
+  const {
+    hearts, maxHearts, canPlay, showRefillModal, setShowRefillModal,
+    loseHeart, refillWithXP, refillByPractice, isRefilling, xpRefillCost,
+  } = useHearts();
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
   const [questions, setQuestions] = useState<GrammarQuestion[]>([]);
@@ -277,6 +284,9 @@ export default function GrammarDrillsPage({ onBack }: Props) {
       setXpEarnedSession((prev) => prev + xp);
       setShowXpPopup(true);
       setTimeout(() => setShowXpPopup(false), 1500);
+    } else {
+      // Lose a heart on wrong answer
+      await loseHeart();
     }
   };
 
@@ -462,6 +472,19 @@ export default function GrammarDrillsPage({ onBack }: Props) {
       <Confetti trigger={showConfetti} />
       <XPPopup xp={difficulty === 'hard' ? 15 : difficulty === 'medium' ? 10 : 5} visible={showXpPopup} message="Correct!" />
 
+      {/* Refill modal */}
+      {showRefillModal && (
+        <RefillHeartsModal
+          hearts={hearts}
+          maxHearts={maxHearts}
+          xpRefillCost={xpRefillCost}
+          isRefilling={isRefilling}
+          onRefillWithXP={refillWithXP}
+          onRefillByPractice={refillByPractice}
+          onClose={() => setShowRefillModal(false)}
+        />
+      )}
+
       <div className="max-w-2xl mx-auto px-4 py-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
@@ -477,7 +500,8 @@ export default function GrammarDrillsPage({ onBack }: Props) {
             <span className="font-bold">{GRAMMAR_TOPICS.find((t) => t.id === selectedTopic)?.name}</span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-4">
+            <HeartsBar hearts={hearts} maxHearts={maxHearts} size="sm" />
             <span className="text-sm font-bold text-amber-400">{score}/{questions.length}</span>
           </div>
         </div>

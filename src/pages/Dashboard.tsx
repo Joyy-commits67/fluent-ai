@@ -2,14 +2,17 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Play, ArrowRight, Zap, Flame, Target, Clock, Trophy, Star,
-  TrendingUp, MessageSquare, Brain, Mic, Award, BookOpen
+  TrendingUp, MessageSquare, Brain, Mic, Award, BookOpen, Heart
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { getModeLabel, getModeDescription, LEAGUE_ICONS, getStreakEmoji, getMotivationalMessage, LEAGUES } from '../lib/xp';
 import ProgressBar from '../components/ui/ProgressBar';
 import StreakFlame from '../components/ui/StreakFlame';
+import HeartsBar from '../components/ui/HeartsBar';
+import RefillHeartsModal from '../components/ui/RefillHeartsModal';
 import Confetti from '../components/ui/Confetti';
+import { useHearts } from '../hooks/useHearts';
 import type { SessionMode, Session, DailyActivity, League } from '../types';
 
 interface ModeCard {
@@ -38,6 +41,10 @@ interface Props {
 
 export default function Dashboard({ onStartSession, onStartGrammar, onStartVocabLab }: Props) {
   const { profile, refreshProfile } = useAuth();
+  const {
+    hearts, maxHearts, canPlay, showRefillModal, setShowRefillModal,
+    refillWithXP, refillByPractice, isRefilling, xpRefillCost,
+  } = useHearts();
   const [recentSessions, setRecentSessions] = useState<Session[]>([]);
   const [activity, setActivity] = useState<DailyActivity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,6 +112,13 @@ export default function Dashboard({ onStartSession, onStartGrammar, onStartVocab
 
   const handleStart = () => {
     if (!selectedMode) return;
+
+    // Check hearts before starting
+    if (!canPlay) {
+      setShowRefillModal(true);
+      return;
+    }
+
     if (selectedMode.special === 'grammar') {
       onStartGrammar?.();
     } else if (selectedMode.special === 'vocablab') {
@@ -122,6 +136,19 @@ export default function Dashboard({ onStartSession, onStartGrammar, onStartVocab
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Celebration */}
         <Confetti trigger={dailyGoalMet} />
+
+        {/* Refill Modal */}
+        {showRefillModal && (
+          <RefillHeartsModal
+            hearts={hearts}
+            maxHearts={maxHearts}
+            xpRefillCost={xpRefillCost}
+            isRefilling={isRefilling}
+            onRefillWithXP={refillWithXP}
+            onRefillByPractice={refillByPractice}
+            onClose={() => setShowRefillModal(false)}
+          />
+        )}
 
         {/* Welcome Banner */}
         <motion.div
@@ -144,6 +171,10 @@ export default function Dashboard({ onStartSession, onStartGrammar, onStartVocab
 
             {profile && (
               <div className="flex items-center gap-6">
+                <div className="text-center">
+                  <HeartsBar hearts={hearts} maxHearts={maxHearts} size="md" />
+                  <div className="text-xs text-white/40 mt-1">Hearts</div>
+                </div>
                 <div className="text-center">
                   <StreakFlame streak={profile.streak} size="md" />
                   <div className="text-xs text-white/40 mt-1">Streak</div>

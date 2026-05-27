@@ -44,6 +44,8 @@ export interface Profile {
   sound_enabled: boolean;
   speech_speed: number;
   auto_listen: boolean;
+  hearts: number;
+  hearts_refilled_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -202,4 +204,21 @@ export interface LeaderboardEntry {
   avatar_url: string;
   xp: number;
   is_current_user: boolean;
+}
+
+export interface FriendQuest {
+  id: string;
+  user1_id: string;
+  user2_id: string;
+  quest_type: 'xp_goal' | 'perfect_lessons' | 'sessions';
+  target_value: number;
+  user1_progress: number;
+  user2_progress: number;
+  is_completed: boolean;
+  week_start: string;
+  week_end: string;
+  reward_xp: number;
+  created_at: string;
+  completed_at: string | null;
+  partner_profile?: Profile;
 }

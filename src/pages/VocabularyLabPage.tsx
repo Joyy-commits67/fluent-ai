@@ -5,10 +5,13 @@ import {
   Sparkles, Trophy, Zap, Star, Lightbulb, Keyboard, Target
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useHearts } from '../hooks/useHearts';
 import { supabase } from '../lib/supabase';
 import { callGemini } from '../lib/gemini';
 import Confetti from '../components/ui/Confetti';
 import XPPopup from '../components/ui/XPPopup';
+import HeartsBar from '../components/ui/HeartsBar';
+import RefillHeartsModal from '../components/ui/RefillHeartsModal';
 import { XP_PER_WORD_LEARNED } from '../lib/xp';
 
 type ChallengeType = 'type-word' | 'pick-definition' | 'fill-blanks';
@@ -138,6 +141,10 @@ async function generateChallenges(wordData: NewWordData): Promise<Challenge[]> {
 
 export default function VocabularyLabPage({ onBack }: Props) {
   const { user, profile, refreshProfile } = useAuth();
+  const {
+    hearts, maxHearts, canPlay, showRefillModal, setShowRefillModal,
+    loseHeart, refillWithXP, refillByPractice, isRefilling, xpRefillCost,
+  } = useHearts();
   const [loading, setLoading] = useState(true);
   const [currentWord, setCurrentWord] = useState<NewWordData | null>(null);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
@@ -194,7 +201,7 @@ export default function VocabularyLabPage({ onBack }: Props) {
     setShowHint(false);
   };
 
-  const checkAnswer = () => {
+  const checkAnswer = async () => {
     const currentChallenge = challenges[challengeIndex];
     if (!currentChallenge) return;
 
@@ -229,6 +236,8 @@ export default function VocabularyLabPage({ onBack }: Props) {
       setStreak((prev) => prev + 1);
     } else {
       setStreak(0);
+      // Lose a heart on wrong answer
+      await loseHeart();
     }
   };
 
@@ -377,6 +386,19 @@ export default function VocabularyLabPage({ onBack }: Props) {
       <Confetti trigger={showConfetti} />
       <XPPopup xp={XP_PER_WORD_LEARNED} visible={showXpPopup} message="Word Mastered!" />
 
+      {/* Refill modal */}
+      {showRefillModal && (
+        <RefillHeartsModal
+          hearts={hearts}
+          maxHearts={maxHearts}
+          xpRefillCost={xpRefillCost}
+          isRefilling={isRefilling}
+          onRefillWithXP={refillWithXP}
+          onRefillByPractice={refillByPractice}
+          onClose={() => setShowRefillModal(false)}
+        />
+      )}
+
       <div className="max-w-2xl mx-auto px-4 py-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
@@ -393,6 +415,7 @@ export default function VocabularyLabPage({ onBack }: Props) {
           </div>
 
           <div className="flex items-center gap-4">
+            <HeartsBar hearts={hearts} maxHearts={maxHearts} size="sm" />
             {streak > 0 && (
               <div className="flex items-center gap-1 px-2 py-1 bg-amber-500/20 rounded-lg">
                 <Star size={14} className="text-amber-400" fill="currentColor" />

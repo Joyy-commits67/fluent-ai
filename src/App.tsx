@@ -9,6 +9,7 @@ import InterviewPrepPage from './pages/InterviewPrepPage';
 import IELTSPage from './pages/IELTSPage';
 import GrammarDrillsPage from './pages/GrammarDrillsPage';
 import VocabularyLabPage from './pages/VocabularyLabPage';
+import QuestsPage from './pages/QuestsPage';
 import ProgressPage from './pages/ProgressPage';
 import AchievementsPage from './pages/AchievementsPage';
 import VocabularyPage from './pages/VocabularyPage';
@@ -19,7 +20,7 @@ import Navbar from './components/Navbar';
 import FloatingGradient from './components/ui/FloatingGradient';
 import type { SessionMode } from './types';
 
-type AppPage = 'landing' | 'auth' | 'dashboard' | 'session' | 'interview' | 'ielts' | 'grammar' | 'vocablab' | 'progress' | 'achievements' | 'vocabulary' | 'leaderboard' | 'friends' | 'settings';
+type AppPage = 'landing' | 'auth' | 'dashboard' | 'session' | 'interview' | 'ielts' | 'grammar' | 'vocablab' | 'quests' | 'progress' | 'achievements' | 'vocabulary' | 'leaderboard' | 'friends' | 'settings';
 
 interface SessionConfig {
   mode: SessionMode;
@@ -86,11 +87,11 @@ function AppContent() {
     setPage(navPage);
   };
 
-  const isAppPage = user && page !== 'session' && page !== 'landing' && page !== 'auth' && page !== 'grammar' && page !== 'interview' && page !== 'ielts' && page !== 'vocablab';
+  const isAppPage = user && page !== 'session' && page !== 'landing' && page !== 'auth' && page !== 'grammar' && page !== 'interview' && page !== 'ielts' && page !== 'vocablab' && page !== 'quests';
 
   return (
     <div className="min-h-screen bg-[#090e1a] text-white">
-      {!['landing', 'auth', 'session', 'grammar', 'interview', 'ielts', 'vocablab'].includes(page) && <FloatingGradient />}
+      {!['landing', 'auth', 'session', 'grammar', 'interview', 'ielts', 'vocablab', 'quests'].includes(page) && <FloatingGradient />}
 
       {isAppPage && (
         <Navbar
@@ -157,6 +158,12 @@ function AppContent() {
         {page === 'vocablab' && user && (
           <motion.div key="vocablab" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <VocabularyLabPage onBack={() => setPage('dashboard')} />
+          </motion.div>
+        )}
+
+        {page === 'quests' && user && (
+          <motion.div key="quests" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <QuestsPage onBack={() => setPage('dashboard')} />
           </motion.div>
         )}
 

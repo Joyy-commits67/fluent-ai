@@ -1,12 +1,13 @@
 import { motion } from 'framer-motion';
-import { LayoutDashboard, TrendingUp, Trophy, Settings, LogOut, Menu, X, Mic, BookOpen, Users, Crown } from 'lucide-react';
+import { LayoutDashboard, TrendingUp, Trophy, Settings, LogOut, Menu, X, Mic, BookOpen, Users, Crown, Target } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import ProgressBar from './ui/ProgressBar';
 import StreakFlame from './ui/StreakFlame';
+import HeartsBar from './ui/HeartsBar';
 import { LEAGUE_ICONS } from '../lib/xp';
 
-type Page = 'dashboard' | 'progress' | 'achievements' | 'vocabulary' | 'friends' | 'settings' | 'leaderboard';
+type Page = 'dashboard' | 'progress' | 'achievements' | 'vocabulary' | 'friends' | 'settings' | 'leaderboard' | 'quests';
 
 interface Props {
   currentPage: Page;
@@ -20,6 +21,7 @@ export default function Navbar({ currentPage, onNavigate }: Props) {
   const navItems: { page: Page; icon: typeof LayoutDashboard; label: string }[] = [
     { page: 'dashboard', icon: LayoutDashboard, label: 'Learn' },
     { page: 'vocabulary', icon: BookOpen, label: 'Words' },
+    { page: 'quests', icon: Target, label: 'Quests' },
     { page: 'leaderboard', icon: Crown, label: 'Leagues' },
     { page: 'friends', icon: Users, label: 'Friends' },
     { page: 'progress', icon: TrendingUp, label: 'Progress' },
@@ -45,6 +47,13 @@ export default function Navbar({ currentPage, onNavigate }: Props) {
           {profile && (
             <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-orange-500/15 border border-orange-500/25 rounded-full">
               <StreakFlame streak={profile.streak} size="sm" />
+            </div>
+          )}
+
+          {/* Hearts */}
+          {profile && (
+            <div className="flex items-center px-2">
+              <HeartsBar hearts={profile.hearts} maxHearts={5} size="sm" />
             </div>
           )}
 
