@@ -6,19 +6,25 @@ const MAX_HEARTS = 5;
 const XP_REFILL_COST = 100;
 
 export function useHearts() {
-  const { user, profile, refreshProfile, updateProfile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const [hearts, setHearts] = useState<number>(MAX_HEARTS);
   const [isRefilling, setIsRefilling] = useState(false);
   const [showRefillModal, setShowRefillModal] = useState(false);
 
+  const isPremium = profile?.is_premium ?? false;
+
   useEffect(() => {
     if (profile?.hearts !== undefined) {
-      setHearts(profile.hearts);
+      // Premium users always show max hearts
+      setHearts(isPremium ? MAX_HEARTS : profile.hearts);
     }
-  }, [profile?.hearts]);
+  }, [profile?.hearts, isPremium]);
 
   const loseHeart = useCallback(async (): Promise<boolean> => {
     if (!user || !profile) return false;
+
+    // Premium users never lose hearts
+    if (isPremium) return true;
 
     const currentHearts = profile.hearts;
     if (currentHearts <= 0) {
@@ -41,10 +47,11 @@ export function useHearts() {
     }
 
     return true;
-  }, [user, profile, refreshProfile]);
+  }, [user, profile, isPremium, refreshProfile]);
 
   const refillWithXP = useCallback(async (): Promise<boolean> => {
     if (!user || !profile) return false;
+    if (isPremium) return true; // Already has infinite hearts
     if (profile.xp < XP_REFILL_COST) return false;
 
     setIsRefilling(true);
@@ -66,10 +73,11 @@ export function useHearts() {
     refreshProfile();
     setIsRefilling(false);
     return true;
-  }, [user, profile, refreshProfile]);
+  }, [user, profile, isPremium, refreshProfile]);
 
   const refillByPractice = useCallback(async (): Promise<boolean> => {
     if (!user || !profile) return false;
+    if (isPremium) return true; // Already has infinite hearts
 
     const newHearts = Math.min(MAX_HEARTS, profile.hearts + 1);
     setHearts(newHearts);
@@ -85,9 +93,10 @@ export function useHearts() {
 
     refreshProfile();
     return true;
-  }, [user, profile, refreshProfile]);
+  }, [user, profile, isPremium, refreshProfile]);
 
-  const canPlay = hearts > 0;
+  // Premium users can always play; free users need hearts > 0
+  const canPlay = isPremium || hearts > 0;
 
   return {
     hearts,
@@ -100,5 +109,6 @@ export function useHearts() {
     refillWithXP,
     refillByPractice,
     xpRefillCost: XP_REFILL_COST,
+    isPremium,
   };
 }

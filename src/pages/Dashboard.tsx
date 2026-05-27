@@ -21,7 +21,7 @@ interface ModeCard {
   description: string;
   color: string;
   badge?: string;
-  special?: 'grammar' | 'vocablab';
+  special?: 'grammar' | 'vocablab' | 'premium';
 }
 
 const MODE_CARDS: ModeCard[] = [
@@ -31,19 +31,22 @@ const MODE_CARDS: ModeCard[] = [
   { mode: 'grammar_challenge', label: 'Grammar Drills', description: 'Duolingo-style word puzzles', color: 'from-rose-500 to-pink-500', badge: 'Fun', special: 'grammar' },
   { mode: 'ielts', label: 'IELTS Prep', description: 'Full IELTS speaking test simulation', color: 'from-amber-500 to-orange-500' },
   { mode: 'listening', label: 'Listening Lab', description: 'Improve comprehension skills', color: 'from-sky-500 to-blue-500' },
+  { mode: 'confidence', label: 'Premium Dashboard', description: 'Infinite hearts, smart review, interview pro', color: 'from-amber-400 to-yellow-600', badge: 'PRO', special: 'premium' },
 ];
 
 interface Props {
   onStartSession: (mode: SessionMode, options?: { topic?: string; role?: string; company?: string; difficulty?: string }) => void;
   onStartGrammar?: () => void;
   onStartVocabLab?: () => void;
+  onStartPremium?: () => void;
 }
 
-export default function Dashboard({ onStartSession, onStartGrammar, onStartVocabLab }: Props) {
+export default function Dashboard({ onStartSession, onStartGrammar, onStartVocabLab, onStartPremium }: Props) {
   const { profile, refreshProfile } = useAuth();
   const {
     hearts, maxHearts, canPlay, showRefillModal, setShowRefillModal,
     refillWithXP, refillByPractice, isRefilling, xpRefillCost,
+    isPremium,
   } = useHearts();
   const [recentSessions, setRecentSessions] = useState<Session[]>([]);
   const [activity, setActivity] = useState<DailyActivity[]>([]);
@@ -123,6 +126,8 @@ export default function Dashboard({ onStartSession, onStartGrammar, onStartVocab
       onStartGrammar?.();
     } else if (selectedMode.special === 'vocablab') {
       onStartVocabLab?.();
+    } else if (selectedMode.special === 'premium') {
+      onStartPremium?.();
     } else if (selectedMode.mode === 'interview') {
       onStartSession('interview', { role: interviewRole, company: interviewCompany, difficulty });
     } else {
@@ -172,7 +177,7 @@ export default function Dashboard({ onStartSession, onStartGrammar, onStartVocab
             {profile && (
               <div className="flex items-center gap-6">
                 <div className="text-center">
-                  <HeartsBar hearts={hearts} maxHearts={maxHearts} size="md" />
+                  <HeartsBar hearts={hearts} maxHearts={maxHearts} size="md" isPremium={isPremium} />
                   <div className="text-xs text-white/40 mt-1">Hearts</div>
                 </div>
                 <div className="text-center">

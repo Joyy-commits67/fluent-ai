@@ -43,6 +43,7 @@ const DEFAULT_PROFILE: Omit<Profile, 'id' | 'created_at' | 'updated_at'> = {
   auto_listen: true,
   hearts: 5,
   hearts_refilled_at: null,
+  is_premium: false,
 };
 
 export function AuthProvider({ children }: { children: ReactNode }) {

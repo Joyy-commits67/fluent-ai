@@ -5,7 +5,7 @@ export const XP_PER_WORD_LEARNED = 10;
 export const XP_PER_LESSON = 15;
 export const XP_PER_CHALLENGE = 20;
 
-export const LEAGUES = ['bronze', 'silver', 'gold', 'platinum', 'diamond', 'master', 'legend'] as const;
+export const LEAGUES = ['bronze', 'silver', 'gold', 'platinum', 'diamond', 'master', 'legend', 'diamond_plus'] as const;
 export type League = typeof LEAGUES[number];
 
 export const LEAGUE_ICONS: Record<League, string> = {
@@ -16,6 +16,7 @@ export const LEAGUE_ICONS: Record<League, string> = {
   diamond: '💠',
   master: '🏆',
   legend: '👑',
+  diamond_plus: '💎',
 };
 
 export const LEVEL_NAMES: Record<string, string> = {

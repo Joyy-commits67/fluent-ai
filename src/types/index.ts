@@ -17,7 +17,7 @@ export type Difficulty = 'beginner' | 'elementary' | 'intermediate' | 'upper_int
 
 export type EnglishLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
 
-export type LeagueName = 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond' | 'master' | 'legend';
+export type LeagueName = 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond' | 'master' | 'legend' | 'diamond_plus';
 
 export interface Profile {
   id: string;
@@ -46,6 +46,7 @@ export interface Profile {
   auto_listen: boolean;
   hearts: number;
   hearts_refilled_at: string | null;
+  is_premium: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -222,3 +223,23 @@ export interface FriendQuest {
   completed_at: string | null;
   partner_profile?: Profile;
 }
+
+export interface ErrorNotebookEntry {
+  id: string;
+  user_id: string;
+  source: 'grammar' | 'vocabulary' | 'interview';
+  question_type: string;
+  question_text: string;
+  correct_answer: string;
+  user_answer: string;
+  explanation: string;
+  word: string | null;
+  meaning: string | null;
+  times_wrong: number;
+  times_reviewed: number;
+  last_wrong_at: string;
+  mastered: boolean;
+  created_at: string;
+}
+
+export type InterviewCompany = 'generic' | 'tcs_nqt' | 'google' | 'amazon' | 'microsoft' | 'meta' | 'corporate_hr' | 'consulting' | 'startup';

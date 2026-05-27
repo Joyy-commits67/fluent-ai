@@ -1,15 +1,37 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Heart } from 'lucide-react';
+import { Heart, Infinity } from 'lucide-react';
 
 interface Props {
   hearts: number;
   maxHearts: number;
   size?: 'sm' | 'md' | 'lg';
+  isPremium?: boolean;
 }
 
-export default function HeartsBar({ hearts, maxHearts, size = 'md' }: Props) {
+export default function HeartsBar({ hearts, maxHearts, size = 'md', isPremium = false }: Props) {
   const iconSize = size === 'sm' ? 14 : size === 'md' ? 18 : 22;
   const gap = size === 'sm' ? 'gap-1' : 'gap-1.5';
+
+  // Premium users get infinite hearts display
+  if (isPremium) {
+    return (
+      <div className={`flex items-center ${gap}`}>
+        <motion.div
+          animate={{ scale: [1, 1.1, 1] }}
+          transition={{ duration: 1.5, repeat: Infinity }}
+        >
+          <Heart
+            size={iconSize}
+            className="text-red-500 fill-red-500"
+          />
+        </motion.div>
+        <Infinity
+          size={iconSize}
+          className="text-amber-400"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className={`flex items-center ${gap}`}>

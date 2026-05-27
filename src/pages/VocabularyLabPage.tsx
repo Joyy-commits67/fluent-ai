@@ -144,6 +144,7 @@ export default function VocabularyLabPage({ onBack }: Props) {
   const {
     hearts, maxHearts, canPlay, showRefillModal, setShowRefillModal,
     loseHeart, refillWithXP, refillByPractice, isRefilling, xpRefillCost,
+    isPremium,
   } = useHearts();
   const [loading, setLoading] = useState(true);
   const [currentWord, setCurrentWord] = useState<NewWordData | null>(null);
@@ -238,6 +239,45 @@ export default function VocabularyLabPage({ onBack }: Props) {
       setStreak(0);
       // Lose a heart on wrong answer
       await loseHeart();
+
+      // Record error to notebook for premium Smart Review
+      if (user && currentWord) {
+        const userAnswerStr = currentChallenge.type === 'pick-definition'
+          ? (selectedOption || '')
+          : userInput.trim();
+
+        const { data: existing } = await supabase
+          .from('error_notebook')
+          .select('id, times_wrong')
+          .eq('user_id', user.id)
+          .eq('word', currentWord.word)
+          .eq('source', 'vocabulary')
+          .maybeSingle();
+
+        if (existing) {
+          await supabase
+            .from('error_notebook')
+            .update({
+              times_wrong: existing.times_wrong + 1,
+              last_wrong_at: new Date().toISOString(),
+              user_answer: userAnswerStr,
+            })
+            .eq('id', existing.id);
+        } else {
+          await supabase.from('error_notebook').insert({
+            user_id: user.id,
+            source: 'vocabulary',
+            question_type: currentChallenge.type,
+            question_text: currentChallenge.instruction,
+            correct_answer: currentChallenge.correctAnswer,
+            user_answer: userAnswerStr,
+            explanation: currentChallenge.hint || currentWord.meaning,
+            word: currentWord.word,
+            meaning: currentWord.meaning,
+            times_wrong: 1,
+          });
+        }
+      }
     }
   };
 
@@ -415,7 +455,7 @@ export default function VocabularyLabPage({ onBack }: Props) {
           </div>
 
           <div className="flex items-center gap-4">
-            <HeartsBar hearts={hearts} maxHearts={maxHearts} size="sm" />
+            <HeartsBar hearts={hearts} maxHearts={maxHearts} size="sm" isPremium={isPremium} />
             {streak > 0 && (
               <div className="flex items-center gap-1 px-2 py-1 bg-amber-500/20 rounded-lg">
                 <Star size={14} className="text-amber-400" fill="currentColor" />

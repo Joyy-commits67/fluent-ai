@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { LayoutDashboard, TrendingUp, Trophy, Settings, LogOut, Menu, X, Mic, BookOpen, Users, Crown, Target } from 'lucide-react';
+import { LayoutDashboard, TrendingUp, Trophy, Settings, LogOut, Menu, X, Mic, BookOpen, Users, Crown, Target, Diamond } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import ProgressBar from './ui/ProgressBar';
@@ -53,7 +53,7 @@ export default function Navbar({ currentPage, onNavigate }: Props) {
           {/* Hearts */}
           {profile && (
             <div className="flex items-center px-2">
-              <HeartsBar hearts={profile.hearts} maxHearts={5} size="sm" />
+              <HeartsBar hearts={profile.hearts} maxHearts={5} size="sm" isPremium={profile.is_premium} />
             </div>
           )}
 
@@ -96,14 +96,38 @@ export default function Navbar({ currentPage, onNavigate }: Props) {
               <Settings size={18} />
             </button>
 
+            {/* Premium button */}
+            {profile && (
+              <button
+                onClick={() => window.location.href = '#premium'}
+                className={`p-2 rounded-lg transition-colors ${
+                  profile.is_premium
+                    ? 'text-amber-400 hover:bg-amber-500/10'
+                    : 'text-white/30 hover:text-amber-400 hover:bg-amber-500/5'
+                }`}
+                title={profile.is_premium ? 'Premium Dashboard' : 'Upgrade to Premium'}
+              >
+                <Crown size={18} />
+              </button>
+            )}
+
             {/* Profile */}
             {profile && (
               <button
                 onClick={() => onNavigate('settings')}
-                className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-white/5 transition-colors"
+                className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-white/5 transition-colors relative"
               >
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-xs font-bold">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold relative ${
+                  profile.is_premium
+                    ? 'bg-gradient-to-br from-amber-500 to-yellow-600 ring-2 ring-amber-400/30'
+                    : 'bg-gradient-to-br from-blue-500 to-cyan-500'
+                }`}>
                   {profile.display_name?.[0]?.toUpperCase() || 'U'}
+                  {profile.is_premium && (
+                    <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-amber-400 rounded-full flex items-center justify-center">
+                      <Diamond size={8} className="text-black" />
+                    </span>
+                  )}
                 </div>
               </button>
             )}

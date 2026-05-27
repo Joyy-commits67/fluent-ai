@@ -202,6 +202,7 @@ export default function GrammarDrillsPage({ onBack }: Props) {
   const {
     hearts, maxHearts, canPlay, showRefillModal, setShowRefillModal,
     loseHeart, refillWithXP, refillByPractice, isRefilling, xpRefillCost,
+    isPremium,
   } = useHearts();
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
@@ -287,6 +288,39 @@ export default function GrammarDrillsPage({ onBack }: Props) {
     } else {
       // Lose a heart on wrong answer
       await loseHeart();
+
+      // Record error to notebook for premium Smart Review
+      if (user) {
+        const { data: existing } = await supabase
+          .from('error_notebook')
+          .select('id, times_wrong')
+          .eq('user_id', user.id)
+          .eq('question_text', currentQuestion.sentence)
+          .eq('source', 'grammar')
+          .maybeSingle();
+
+        if (existing) {
+          await supabase
+            .from('error_notebook')
+            .update({
+              times_wrong: existing.times_wrong + 1,
+              last_wrong_at: new Date().toISOString(),
+              user_answer: userSentence,
+            })
+            .eq('id', existing.id);
+        } else {
+          await supabase.from('error_notebook').insert({
+            user_id: user.id,
+            source: 'grammar',
+            question_type: currentQuestion.type,
+            question_text: currentQuestion.sentence,
+            correct_answer: currentQuestion.correctAnswer,
+            user_answer: userSentence,
+            explanation: currentQuestion.explanation,
+            times_wrong: 1,
+          });
+        }
+      }
     }
   };
 
@@ -501,7 +535,7 @@ export default function GrammarDrillsPage({ onBack }: Props) {
           </div>
 
           <div className="flex items-center gap-4">
-            <HeartsBar hearts={hearts} maxHearts={maxHearts} size="sm" />
+            <HeartsBar hearts={hearts} maxHearts={maxHearts} size="sm" isPremium={isPremium} />
             <span className="text-sm font-bold text-amber-400">{score}/{questions.length}</span>
           </div>
         </div>
