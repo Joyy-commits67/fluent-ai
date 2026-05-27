@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase';
 import { callGemini, analyzeGrammar, generateInterviewReport, GeminiMessage } from '../lib/gemini';
 import { speechManager } from '../lib/speech';
 import { getModeLabel, XP_PER_MESSAGE, XP_PER_SESSION } from '../lib/xp';
+import { addWordToLibrary, getLearnedItems } from '../lib/library'; // 👈 Imported your memory database controller hooks
 import AIAvatar from '../components/ui/AIAvatar';
 import VoiceWave from '../components/ui/VoiceWave';
 import TypingIndicator from '../components/ui/TypingIndicator';
@@ -35,29 +36,17 @@ function buildSystemPrompt(mode: SessionMode, role: string, company: string, dif
 
   const prompts: Record<SessionMode, string> = {
     speaking: `You are Aria, an encouraging AI English speaking coach. ${difficultyGuide[difficulty] || ''} Have natural flowing conversations. Respond in 2-3 sentences. Ask follow-ups to keep talking. Be warm and supportive.`,
-
     interview: `You are a professional HR interviewer for a ${role} position${company ? ` at ${company}` : ''}. ${difficultyGuide[difficulty] || ''} Ask realistic interview questions one at a time. After each answer, provide brief feedback then ask the next question. After 6-8 questions, say "That concludes our interview. You can now view your performance report."`,
-
     casual: `You are Aria, a friendly AI conversation partner. ${difficultyGuide[difficulty] || ''} Have fun, witty conversations on any topic. Keep it light and engaging. React emotionally to what the user says.`,
-
     ielts: `You are an IELTS speaking examiner. Conduct a realistic IELTS speaking test. ${difficultyGuide[difficulty] || ''} Part 1: personal questions. Part 2: cue card topic. Part 3: abstract discussion. Use standard IELTS examiner language.`,
-
     debate: `You are a debate partner. Propose a topic, argue one side while the user argues the other. ${difficultyGuide[difficulty] || ''} Challenge their arguments respectfully. Present counter-arguments. Keep it engaging and educational.`,
-
     story: `You are a storytelling coach. ${difficultyGuide[difficulty] || ''} Help practice narrative skills. Start collaborative stories or ask user to narrate experiences. Give feedback on structure and vocabulary.`,
-
     pronunciation: `You are a pronunciation coach. ${difficultyGuide[difficulty] || ''} Give words/phrases to practice. Provide phonetic tips. Help with specific sounds. Celebrate improvements.`,
-
     vocab: `You are a vocabulary coach. ${difficultyGuide[difficulty] || ''} Introduce new words in context. Ask user to use them in sentences. Quiz on meanings. Make learning fun through storytelling.`,
-
     confidence: `You are a confidence-building coach. ${difficultyGuide[difficulty] || ''} Help overcome speaking anxiety through positive reinforcement. Use easy topics. Always celebrate attempts. Never criticize harshly.`,
-
     rapid: `You are running a rapid speaking challenge! Give a new topic every response. Keep energy HIGH. ${difficultyGuide[difficulty] || ''} React enthusiastically. Immediately give the next topic after their response.`,
-
     shadow: `You are a shadowing coach. Speak a phrase, then ask user to repeat it exactly. ${difficultyGuide[difficulty] || ''} Focus on rhythm, intonation, and pronunciation. Provide phrases to shadow.`,
-
     grammar_challenge: `You are a grammar drill instructor. ${difficultyGuide[difficulty] || ''} Give sentences with grammar errors for user to correct. Or provide fill-in-the-blank exercises. Explain rules after each answer.`,
-
     listening: `You are a listening comprehension coach. ${difficultyGuide[difficulty] || ''} Read short passages or describe scenarios. Ask comprehension questions. Help improve listening skills.`,
   };
 
@@ -103,15 +92,23 @@ export default function SessionPage({ mode, topic, role = '', company = '', diff
   const [lastXpEarned, setLastXpEarned] = useState(0);
   const [lastXpMessage, setLastXpMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [learnedItems, setLearnedItems] = useState<string[]>([]); // 👈 Memory block-list state array
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const systemPrompt = buildSystemPrompt(mode, role, company, difficulty);
   const sessionInitialized = useRef(false);
 
-  // Initialize session
+  // Initialize session & download anti-repetition memory array
   useEffect(() => {
-    if (!user || sessionInitialized.current) return;
+    if (!user) return;
+
+    // Pull words, sentences, or topics already processed to maintain an avoidance index
+    getLearnedItems(user.id, mode).then((items) => {
+      setLearnedItems(items);
+    });
+
+    if (sessionInitialized.current) return;
     sessionInitialized.current = true;
 
     supabase
@@ -260,6 +257,13 @@ export default function SessionPage({ mode, topic, role = '', company = '', diff
         grammar_explanation: '',
       });
 
+      // 👉 SYSTEM VAULT COMMIT: Submits current context to your permanent anti-repetition library table
+      addWordToLibrary(user.id, {
+        wordOrPhrase: content,
+        contextSentence: content,
+        category: mode
+      }).then();
+
       // Award XP and update weekly league xp
       setLastXpEarned(XP_PER_MESSAGE);
       setLastXpMessage('Great response!');
@@ -326,7 +330,8 @@ export default function SessionPage({ mode, topic, role = '', company = '', diff
     // Get AI response
     let aiText: string;
     try {
-      aiText = await callGemini(newHistory, systemPrompt);
+      // 👉 MEMORY BLOCK STREAM INJECTION: Feeds active learnedItems array parameter to callGemini engine
+      aiText = await callGemini(newHistory, systemPrompt, learnedItems);
     } catch (err) {
       console.error('Gemini call failed:', err);
       setIsThinking(false);
