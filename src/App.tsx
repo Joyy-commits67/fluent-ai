@@ -58,7 +58,6 @@ function AppContent() {
   }
 
   const startSession = (mode: SessionMode, options?: { topic?: string; role?: string; company?: string; difficulty?: string }) => {
-    // Special routing for interview and ielts
     if (mode === 'interview') {
       setSessionConfig({ mode, ...options });
       setPage('interview');
@@ -120,7 +119,47 @@ function AppContent() {
         )}
 
         {page === 'dashboard' && user && (
-          <motion.div key="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <motion.div key="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="max-w-7xl mx-auto px-4 pt-6">
+            
+            {/* Sleek Obsidian & Gold Premium Card Container */}
+            <motion.div
+              initial={{ opacity: 0, y: -15 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="relative overflow-hidden rounded-2xl p-6 mb-8 bg-gradient-to-r from-[#111625] via-[#1c1710] to-[#111625] border border-yellow-600/30 shadow-lg cursor-pointer group"
+              onClick={() => setPage('premium')}
+            >
+              {/* Shimmer Overlay effect */}
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:animate-shimmer ease-in-out" />
+
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-yellow-500 to-amber-600 flex items-center justify-center text-2xl shadow-md">
+                    👑
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-yellow-100 flex items-center gap-2">
+                      FluentAI Pro Premium
+                    </h2>
+                    <p className="text-sm text-gray-400 mt-0.5">
+                      Status: <span className="text-yellow-500 font-semibold">Active Premium Member</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 md:gap-6 text-xs md:text-sm text-gray-300">
+                  <div className="flex items-center gap-1.5 bg-[#090e1a]/60 px-3 py-1.5 rounded-lg border border-gray-800">
+                    <span>♾️</span> <span className="text-gray-400">Infinite Hearts Active</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-[#090e1a]/60 px-3 py-1.5 rounded-lg border border-gray-800 hover:border-yellow-600/30 transition-colors">
+                    <span>📓</span> <span className="text-gray-400">Error Notebook</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-yellow-500/10 text-yellow-200 px-3 py-1.5 rounded-lg border border-yellow-500/20 font-medium">
+                    View Perks &rarr;
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+
             <Dashboard onStartSession={startSession} onStartGrammar={startGrammarDrills} onStartVocabLab={startVocabLab} onStartPremium={startPremium} />
           </motion.div>
         )}
