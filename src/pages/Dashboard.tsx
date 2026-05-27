@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Play, ArrowRight, Zap, Flame, Target, Clock, Trophy, Star,
-  TrendingUp, MessageSquare, Brain, Mic, Award, BookOpen, Heart
+  TrendingUp, MessageSquare, Brain, Mic, Award, BookOpen, Heart,
+  Map, Grid3X3
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -12,6 +13,7 @@ import StreakFlame from '../components/ui/StreakFlame';
 import HeartsBar from '../components/ui/HeartsBar';
 import RefillHeartsModal from '../components/ui/RefillHeartsModal';
 import Confetti from '../components/ui/Confetti';
+import LearnPath from '../components/LearnPath';
 import { useHearts } from '../hooks/useHearts';
 import type { SessionMode, Session, DailyActivity, League } from '../types';
 
@@ -53,6 +55,7 @@ export default function Dashboard({ onStartSession, onStartGrammar, onStartVocab
   const [loading, setLoading] = useState(true);
   const [selectedMode, setSelectedMode] = useState<ModeCard | null>(null);
   const [dailyGoalMet, setDailyGoalMet] = useState(false);
+  const [viewMode, setViewMode] = useState<'path' | 'grid'>('path');
 
   // Interview options
   const [interviewRole, setInterviewRole] = useState('Software Engineer');
@@ -134,6 +137,30 @@ export default function Dashboard({ onStartSession, onStartGrammar, onStartVocab
       onStartSession(selectedMode.mode, { difficulty });
     }
     setSelectedMode(null);
+  };
+
+  // Start lesson from the Learning Path
+  const handleStartLesson = (mode: string, isReview?: boolean) => {
+    if (!canPlay) {
+      setShowRefillModal(true);
+      return;
+    }
+
+    // Mark that this is a lesson-path session so completion can be tracked
+    sessionStorage.setItem('lesson_path_mode', mode);
+    sessionStorage.setItem('lesson_path_review', isReview ? 'true' : 'false');
+
+    if (mode === 'grammar') {
+      onStartGrammar?.();
+    } else if (mode === 'vocablab') {
+      onStartVocabLab?.();
+    } else if (mode === 'interview') {
+      onStartSession('interview', { difficulty: 'intermediate' });
+    } else if (mode === 'listening') {
+      onStartSession('listening', { difficulty: 'intermediate' });
+    } else {
+      onStartSession(mode as SessionMode, { difficulty });
+    }
   };
 
   return (
@@ -263,39 +290,70 @@ export default function Dashboard({ onStartSession, onStartGrammar, onStartVocab
           ))}
         </div>
 
-        {/* Learning Modes */}
+        {/* Learning Path / Mode Cards Toggle */}
         <div>
-          <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-            <Play size={18} className="text-blue-400" />
-            Choose Your Practice
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {MODE_CARDS.map((card, i) => (
-              <motion.div
-                key={card.mode}
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
-                whileHover={{ scale: 1.02, translateY: -2 }}
-                onClick={() => setSelectedMode(card)}
-                className="relative p-5 bg-white/[0.03] border border-white/10 rounded-2xl cursor-pointer hover:border-white/20 hover:bg-white/[0.06] transition-all group overflow-hidden"
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold flex items-center gap-2">
+              <Map size={18} className="text-blue-400" />
+              Learning Path
+            </h2>
+            <div className="flex bg-white/5 rounded-lg p-0.5">
+              <button
+                onClick={() => setViewMode('path')}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  viewMode === 'path' ? 'bg-blue-500/20 text-blue-300' : 'text-white/40 hover:text-white/60'
+                }`}
               >
-                {card.badge && (
-                  <div className={`absolute -top-0 -right-0 px-2 py-0.5 bg-gradient-to-r ${card.color} rounded-bl-xl rounded-tr-xl text-xs font-bold`}>
-                    {card.badge}
-                  </div>
-                )}
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${card.color} flex items-center justify-center mb-3 group-hover:scale-110 transition-transform`}>
-                  <Mic size={22} className="text-white" />
-                </div>
-                <h3 className="font-bold text-sm mb-1">{card.label}</h3>
-                <p className="text-xs text-white/50 leading-relaxed">{card.description}</p>
-                <div className={`mt-3 flex items-center gap-1 text-xs font-semibold bg-gradient-to-r ${card.color} bg-clip-text text-transparent opacity-0 group-hover:opacity-100 transition-opacity`}>
-                  Start <ArrowRight size={12} className="text-blue-400" />
+                <Map size={14} className="inline mr-1" />Path
+              </button>
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  viewMode === 'grid' ? 'bg-blue-500/20 text-blue-300' : 'text-white/40 hover:text-white/60'
+                }`}
+              >
+                <Grid3X3 size={14} className="inline mr-1" />All Modes
+              </button>
+            </div>
+          </div>
+
+          <AnimatePresence mode="wait">
+            {viewMode === 'path' ? (
+              <motion.div key="path" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                <LearnPath onStartLesson={handleStartLesson} />
+              </motion.div>
+            ) : (
+              <motion.div key="grid" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {MODE_CARDS.map((card, i) => (
+                    <motion.div
+                      key={card.mode}
+                      initial={{ opacity: 0, y: 15 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.05 }}
+                      whileHover={{ scale: 1.02, translateY: -2 }}
+                      onClick={() => setSelectedMode(card)}
+                      className="relative p-5 bg-white/[0.03] border border-white/10 rounded-2xl cursor-pointer hover:border-white/20 hover:bg-white/[0.06] transition-all group overflow-hidden"
+                    >
+                      {card.badge && (
+                        <div className={`absolute -top-0 -right-0 px-2 py-0.5 bg-gradient-to-r ${card.color} rounded-bl-xl rounded-tr-xl text-xs font-bold`}>
+                          {card.badge}
+                        </div>
+                      )}
+                      <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${card.color} flex items-center justify-center mb-3 group-hover:scale-110 transition-transform`}>
+                        <Mic size={22} className="text-white" />
+                      </div>
+                      <h3 className="font-bold text-sm mb-1">{card.label}</h3>
+                      <p className="text-xs text-white/50 leading-relaxed">{card.description}</p>
+                      <div className={`mt-3 flex items-center gap-1 text-xs font-semibold bg-gradient-to-r ${card.color} bg-clip-text text-transparent opacity-0 group-hover:opacity-100 transition-opacity`}>
+                        Start <ArrowRight size={12} className="text-blue-400" />
+                      </div>
+                    </motion.div>
+                  ))}
                 </div>
               </motion.div>
-            ))}
-          </div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Recent Sessions */}
