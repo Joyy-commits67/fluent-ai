@@ -50,13 +50,20 @@ function queueRequest<T>(fn: () => Promise<T>): Promise<T> {
 
 export async function callGemini(
   messages: GeminiMessage[],
-  systemInstruction?: string
+  systemInstruction?: string,
+  excludedItems: string[] = [] // 👈 Added optional array parameter for block-listed memory tracking
 ): Promise<string> {
   if (!GEMINI_API_KEY) {
     return getFallbackResponse(messages);
   }
 
   return queueRequest(async () => {
+    // Construct dynamic memory constraints
+    let activeInstructions = systemInstruction || '';
+    if (excludedItems.length > 0) {
+      activeInstructions += `\n\nCRITICAL SYSTEM MEMORY RULE: Do NOT under any circumstances repeat, test, use, or bring up the following target words, vocabulary elements, or question scenarios, as the user has already mastered them: [${excludedItems.join(', ')}]. You MUST challenge the user with entirely fresh prompt configurations, alternative phrasing, and distinct contextual challenges.`;
+    }
+
     const body: Record<string, unknown> = {
       contents: messages,
       generationConfig: {
@@ -67,8 +74,8 @@ export async function callGemini(
       },
     };
 
-    if (systemInstruction) {
-      body.systemInstruction = { parts: [{ text: systemInstruction }] };
+    if (activeInstructions) {
+      body.systemInstruction = { parts: [{ text: activeInstructions }] };
     }
 
     try {
@@ -78,7 +85,7 @@ export async function callGemini(
         body: JSON.stringify(body),
       });
 
-      if (!response.ok) {
+    if (!response.ok) {
         const error = await response.json().catch(() => ({}));
         console.error('Gemini API error:', error);
         return getFallbackResponse(messages);
@@ -254,7 +261,6 @@ function getFallbackResponse(messages: GeminiMessage[]): string {
   const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
   const input = lastUserMsg?.parts[0]?.text?.toLowerCase() || '';
 
-  // Context-aware fallbacks
   if (input.includes('hello') || input.includes('hi') || input.includes('hey')) {
     return "Hello! I'm ready to help you practice. What would you like to talk about today?";
   }
@@ -286,7 +292,6 @@ function getFallbackResponse(messages: GeminiMessage[]): string {
   return responses[Math.floor(Math.random() * responses.length)];
 }
 
-// Extract vocabulary words from text
 export function extractVocabularyWords(text: string): string[] {
   const words = text.match(/\b[a-zA-Z]{5,}\b/g) || [];
   const unique = [...new Set(words.map((w) => w.toLowerCase()))];
