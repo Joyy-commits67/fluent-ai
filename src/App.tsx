@@ -119,7 +119,13 @@ function AppContent() {
         )}
 
         {page === 'dashboard' && user && (
-          <motion.div key="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="max-w-7xl mx-auto px-4 pt-6">
+          <motion.div 
+            key="dashboard" 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }} 
+            className="max-w-7xl mx-auto px-4 pt-24 pb-8" // 👈 Added pt-24 spacing to clear fixed navbar
+          >
             
             {/* Sleek Obsidian & Gold Premium Card Container */}
             <motion.div
