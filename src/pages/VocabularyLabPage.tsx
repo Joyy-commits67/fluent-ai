@@ -8,7 +8,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useHearts } from '../hooks/useHearts';
 import { supabase } from '../lib/supabase';
 import { callGemini } from '../lib/gemini';
-import { getNodeByKey } from '../data/lessonData';
 import Confetti from '../components/ui/Confetti';
 import XPPopup from '../components/ui/XPPopup';
 import HeartsBar from '../components/ui/HeartsBar';
@@ -351,30 +350,6 @@ export default function VocabularyLabPage({ onBack }: Props) {
 
         refreshProfile();
       }
-    }
-
-    // Mark lesson path node as completed if started from the path
-    const lessonMode = sessionStorage.getItem('lesson_path_mode');
-    if (lessonMode === 'vocablab') {
-      const { data: lessonData } = await supabase
-        .from('user_lessons')
-        .select('current_section, current_unit, current_node')
-        .eq('user_id', user!.id)
-        .maybeSingle();
-
-      if (lessonData) {
-        const currentNodeKey = `${lessonData.current_section}-${lessonData.current_unit}-${lessonData.current_node}`;
-        const node = getNodeByKey(currentNodeKey);
-        if (node && node.mode === 'vocablab') {
-          const stars = streak >= 2 ? 3 : streak >= 1 ? 2 : 1;
-          const completeFn = (window as unknown as Record<string, unknown>).__completeLessonNode as ((key: string, stars: number) => Promise<void>) | undefined;
-          if (completeFn) {
-            await completeFn(currentNodeKey, stars);
-          }
-        }
-      }
-      sessionStorage.removeItem('lesson_path_mode');
-      sessionStorage.removeItem('lesson_path_review');
     }
   };
 
