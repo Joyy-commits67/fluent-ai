@@ -8,6 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useHearts } from '../hooks/useHearts';
 import { supabase } from '../lib/supabase';
 import { callGemini } from '../lib/gemini';
+import { addWordToLibrary, getLearnedItems } from '../lib/library'; // 👈 Connected global memory cache functions
 import Confetti from '../components/ui/Confetti';
 import XPPopup from '../components/ui/XPPopup';
 import HeartsBar from '../components/ui/HeartsBar';
@@ -31,7 +32,6 @@ interface Challenge {
   instruction: string;
   options?: string[];
   correctAnswer: string;
-  // For fill-blanks: store the missing letters
   missingLetters?: string;
   prefix?: string;
   suffix?: string;
@@ -42,19 +42,25 @@ interface Props {
   onBack: () => void;
 }
 
-async function generateNewWord(userLevel: number): Promise<NewWordData> {
+// 👈 Passed excludedWords straight down into the generation runtime loop
+async function generateNewWord(userLevel: number, excludedWords: string[] = []): Promise<NewWordData> {
   const difficulty = userLevel < 5 ? 'beginner' : userLevel < 15 ? 'intermediate' : 'advanced';
+
+  let exclusionConstraint = '';
+  if (excludedWords.length > 0) {
+    exclusionConstraint = `CRITICAL: Do NOT generate or use any of the following words under any circumstances: [${excludedWords.join(', ')}].`;
+  }
 
   const prompt = `Generate a single NEW vocabulary word for an English learner.
 
 Difficulty: ${difficulty}
 User level: ${userLevel}
+${exclusionConstraint}
 
 Requirements:
 - Word should be USEFUL and commonly used in ${difficulty} contexts
 - DO NOT use common words everyone knows
-- Choose words from topics: business, technology, travel, health, education, environment
-- Make it educational and practical
+- Choose words from topics: business, technology, travel, health, environment, culture
 - Word must be at least 6 letters long
 
 Respond ONLY in this exact JSON format:
@@ -70,32 +76,34 @@ Respond ONLY in this exact JSON format:
 
   try {
     const response = await callGemini([{ role: 'user', parts: [{ text: prompt }] }]);
-    const cleaned = response.replace(/```json|```/g, '').trim();
+    const cleaned = response.replace(/```json|
+```/g, '').trim();
     const parsed = JSON.parse(cleaned);
-    // Ensure word is valid
-    if (!parsed.word || parsed.word.length < 4) {
-      throw new Error('Word too short');
+    
+    if (!parsed.word || parsed.word.length < 4 || excludedWords.includes(parsed.word.toLowerCase().trim())) {
+      throw new Error('Invalid or repeated word returned from engine');
     }
     return parsed;
   } catch (err) {
-    console.error('Failed to generate word:', err);
-    return {
-      word: 'serendipity',
-      meaning: 'The occurrence of happy events by chance',
-      partOfSpeech: 'noun',
-      pronunciation: 'seh-ren-dih-pih-tee',
-      example: 'Meeting my best friend at the coffee shop was pure serendipity.',
-      synonyms: ['luck', 'fortune', 'chance'],
-      difficulty: 'intermediate',
-    };
+    console.error('Failed to generate dynamic word, routing variant options:', err);
+    
+    // Safety Array to prevent looping "serendipity" indefinitely if the network exceptions trigger
+    const backupPool: NewWordData[] = [
+      { word: 'eloquent', meaning: 'Fluent or persuasive in speaking or writing', partOfSpeech: 'adjective', pronunciation: 'eh-luh-kwent', example: 'His graduation speech was incredibly eloquent.', synonyms: ['articulate', 'fluent'], difficulty: 'intermediate' },
+      { word: 'resilient', meaning: 'Able to withstand or recover quickly from difficult conditions', partOfSpeech: 'adjective', pronunciation: 'rih-zil-yunt', example: 'The local businesses proved resilient during the storm.', synonyms: ['tough', 'strong'], difficulty: 'intermediate' },
+      { word: 'pragmatic', meaning: 'Dealing with things sensibly and realistically based on practical conditions', partOfSpeech: 'adjective', pronunciation: 'prag-mat-ik', example: 'We need to take a pragmatic approach to solving this bug.', synonyms: ['practical', 'logical'], difficulty: 'advanced' },
+      { word: 'ubiquitous', meaning: 'Present, appearing, or found everywhere', partOfSpeech: 'adjective', pronunciation: 'yoo-bik-wih-tus', example: 'Smartphones have become completely ubiquitous in modern life.', synonyms: ['omnipresent', 'pervasive'], difficulty: 'advanced' }
+    ];
+
+    const safeSelection = backupPool.find(b => !excludedWords.includes(b.word)) || backupPool[0];
+    return safeSelection;
   }
 }
 
 async function generateChallenges(wordData: NewWordData): Promise<Challenge[]> {
   const challenges: Challenge[] = [];
-  const word = wordData.word.toLowerCase();
+  const word = wordData.word.toLowerCase().trim();
 
-  // Challenge 1: Type the word
   challenges.push({
     type: 'type-word',
     instruction: `Type the word: "${wordData.word}"`,
@@ -103,7 +111,6 @@ async function generateChallenges(wordData: NewWordData): Promise<Challenge[]> {
     hint: `It starts with "${word[0].toUpperCase()}" and has ${word.length} letters`,
   });
 
-  // Challenge 2: Pick the correct definition
   challenges.push({
     type: 'pick-definition',
     instruction: 'Select the correct definition',
@@ -116,9 +123,8 @@ async function generateChallenges(wordData: NewWordData): Promise<Challenge[]> {
     correctAnswer: wordData.meaning,
   });
 
-  // Challenge 3: Fill in the blanks - calculate missing section
   const totalLength = word.length;
-  const lettersToShow = Math.ceil(totalLength / 4); // Show ~25% at start and end
+  const lettersToShow = Math.ceil(totalLength / 4);
 
   const prefix = word.substring(0, lettersToShow);
   const suffix = word.substring(totalLength - lettersToShow);
@@ -161,8 +167,18 @@ export default function VocabularyLabPage({ onBack }: Props) {
   const [showXpPopup, setShowXpPopup] = useState(false);
   const [xpEarned, setXpEarned] = useState(0);
   const [streak, setStreak] = useState(0);
+  const [excludedWords, setExcludedWords] = useState<string[]>([]); // 👈 Keeps persistent tab on learned items state
 
-  const loadNewWord = useCallback(async () => {
+  // Initial load hook to assemble master blacklist from user history
+  useEffect(() => {
+    if (user) {
+      getLearnedItems(user.id, 'vocab').then((items) => {
+        setExcludedWords(items.map(i => i.toLowerCase().trim()));
+      });
+    }
+  }, [user]);
+
+  const loadNewWord = useCallback(async (currentBlacklist: string[]) => {
     if (!user) return;
     setLoading(true);
     setPhase('learn');
@@ -173,7 +189,7 @@ export default function VocabularyLabPage({ onBack }: Props) {
     setShowHint(false);
 
     const userLevel = profile?.level || 1;
-    const wordData = await generateNewWord(userLevel);
+    const wordData = await generateNewWord(userLevel, currentBlacklist); // Pass active cache arrays down
     setCurrentWord(wordData);
 
     const generatedChallenges = await generateChallenges(wordData);
@@ -183,14 +199,20 @@ export default function VocabularyLabPage({ onBack }: Props) {
   }, [user, profile?.level]);
 
   useEffect(() => {
-    loadNewWord();
-  }, [loadNewWord]);
+    if (user) {
+      getLearnedItems(user.id, 'vocab').then((items) => {
+        const cleanItems = items.map(i => i.toLowerCase().trim());
+        setExcludedWords(cleanItems);
+        loadNewWord(cleanItems);
+      });
+    }
+  }, [user, loadNewWord]);
 
   const speakWord = (word: string) => {
     const utterance = new SpeechSynthesisUtterance(word);
     utterance.lang = 'en-US';
     utterance.rate = 0.8;
-    speechSynthesis.speak(utterance);
+    window.speechSynthesis.speak(utterance);
   };
 
   const startChallenges = () => {
@@ -209,25 +231,20 @@ export default function VocabularyLabPage({ onBack }: Props) {
     let correct = false;
 
     if (currentChallenge.type === 'pick-definition') {
-      // Multiple choice - direct string comparison
       correct = (selectedOption || '') === currentChallenge.correctAnswer;
     } else if (currentChallenge.type === 'fill-blanks') {
-      // Fill in blanks - user types ONLY the missing letters
       const userMissingLetters = userInput.trim().toLowerCase();
       const expectedMissingLetters = currentChallenge.missingLetters || '';
 
-      // Option 1: Check if user typed just the missing letters
       if (userMissingLetters === expectedMissingLetters) {
         correct = true;
       } else {
-        // Option 2: Reconstruct full word and compare
         const prefix = currentChallenge.prefix || '';
         const suffix = currentChallenge.suffix || '';
         const reconstructedWord = (prefix + userMissingLetters + suffix).toLowerCase();
         correct = reconstructedWord === currentChallenge.correctAnswer.toLowerCase();
       }
     } else {
-      // Type the word - direct comparison
       correct = userInput.trim().toLowerCase() === currentChallenge.correctAnswer.toLowerCase();
     }
 
@@ -237,14 +254,10 @@ export default function VocabularyLabPage({ onBack }: Props) {
       setStreak((prev) => prev + 1);
     } else {
       setStreak(0);
-      // Lose a heart on wrong answer
       await loseHeart();
 
-      // Record error to notebook for premium Smart Review
       if (user && currentWord) {
-        const userAnswerStr = currentChallenge.type === 'pick-definition'
-          ? (selectedOption || '')
-          : userInput.trim();
+        const userAnswerStr = currentChallenge.type === 'pick-definition' ? (selectedOption || '') : userInput.trim();
 
         const { data: existing } = await supabase
           .from('error_notebook')
@@ -302,8 +315,19 @@ export default function VocabularyLabPage({ onBack }: Props) {
     setShowXpPopup(true);
     setTimeout(() => setShowXpPopup(false), 1500);
 
-    // Save word to user's vocabulary library
     if (user && currentWord) {
+      const cleanTargetWord = currentWord.word.toLowerCase().trim();
+
+      // 1. Instantly log it to our dynamic anti-repetition filter module
+      await addWordToLibrary(user.id, {
+        wordOrPhrase: cleanTargetWord,
+        contextSentence: currentWord.example,
+        category: 'vocab'
+      });
+
+      // 2. Append directly to local component memory stack so it takes effect without refreshing
+      setExcludedWords((prev) => [...prev, cleanTargetWord]);
+
       const { data: existing } = await supabase
         .from('vocabulary_words')
         .select('id')
@@ -329,7 +353,6 @@ export default function VocabularyLabPage({ onBack }: Props) {
           correct_count: 1,
         });
 
-        // Update profile XP
         const { data: profileData } = await supabase
           .from('profiles')
           .select('xp, league_xp, total_words_learned')
@@ -354,7 +377,8 @@ export default function VocabularyLabPage({ onBack }: Props) {
   };
 
   const learnNextWord = () => {
-    loadNewWord();
+    // Passes the latest up-to-date exclusion state straight into the reload handler
+    loadNewWord([...excludedWords]);
   };
 
   const endSession = () => {
@@ -365,11 +389,10 @@ export default function VocabularyLabPage({ onBack }: Props) {
 
   const currentChallenge = challenges[challengeIndex];
 
-  // Session complete screen
   if (sessionComplete) {
     return (
       <div className="min-h-screen bg-[#090e1a] pt-14 flex items-center justify-center">
-        <Confetti trigger={showConfetti} />
+        <Confetti trigger="{showConfetti}"/>
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -383,12 +406,12 @@ export default function VocabularyLabPage({ onBack }: Props) {
 
           <div className="flex gap-4 justify-center mb-6">
             <div className="text-center p-4 bg-violet-500/10 border border-violet-500/20 rounded-xl">
-              <Zap className="mx-auto text-violet-400 mb-2" size={24} />
+              <Zap className="mx-auto text-violet-400 mb-2" size="{24}"/>
               <div className="text-2xl font-bold text-violet-400">{xpEarned}</div>
               <div className="text-xs text-white/40">XP Earned</div>
             </div>
             <div className="text-center p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
-              <BookOpen className="mx-auto text-emerald-400 mb-2" size={24} />
+              <BookOpen className="mx-auto text-emerald-400 mb-2" size="{24}"/>
               <div className="text-2xl font-bold text-emerald-400">{wordsLearned}</div>
               <div className="text-xs text-white/40">Words</div>
             </div>
@@ -400,11 +423,11 @@ export default function VocabularyLabPage({ onBack }: Props) {
               whileTap={{ scale: 0.98 }}
               onClick={() => {
                 setSessionComplete(false);
-                loadNewWord();
+                loadNewWord([...excludedWords]);
               }}
               className="px-6 py-3 bg-gradient-to-r from-violet-500 to-purple-500 rounded-xl font-bold flex items-center gap-2"
             >
-              <RotateCcw size={18} />
+              <RotateCcw size="{18}"/>
               Continue Learning
             </motion.button>
             <motion.button
@@ -423,42 +446,33 @@ export default function VocabularyLabPage({ onBack }: Props) {
 
   return (
     <div className="min-h-screen bg-[#090e1a] pt-14">
-      <Confetti trigger={showConfetti} />
-      <XPPopup xp={XP_PER_WORD_LEARNED} visible={showXpPopup} message="Word Mastered!" />
+      <Confetti trigger="{showConfetti}"/>
+      <XPPopup xp="{XP_PER_WORD_LEARNED}" visible="{showXpPopup}" message="Word Mastered!"/>
 
-      {/* Refill modal */}
       {showRefillModal && (
-        <RefillHeartsModal
-          hearts={hearts}
-          maxHearts={maxHearts}
-          xpRefillCost={xpRefillCost}
-          isRefilling={isRefilling}
-          onRefillWithXP={refillWithXP}
-          onRefillByPractice={refillByPractice}
-          onClose={() => setShowRefillModal(false)}
+        <RefillHeartsModal hearts="{hearts}" maxHearts="{maxHearts}" xpRefillCost="{xpRefillCost}" isRefilling="{isRefilling}" onRefillWithXP="{refillWithXP}" onRefillByPractice="{refillByPractice}" onClose="{()"> setShowRefillModal(false)}
         />
       )}
 
       <div className="max-w-2xl mx-auto px-4 py-6">
-        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <button
             onClick={onBack}
             className="p-2 hover:bg-white/10 rounded-lg transition-colors"
           >
-            <ArrowLeft size={20} className="text-white/50" />
+            <ArrowLeft size="{20}" className="text-white/50"/>
           </button>
 
           <div className="flex items-center gap-3">
-            <Sparkles size={20} className="text-violet-400" />
+            <Sparkles size="{20}" className="text-violet-400"/>
             <span className="font-bold">Vocabulary Lab</span>
           </div>
 
           <div className="flex items-center gap-4">
-            <HeartsBar hearts={hearts} maxHearts={maxHearts} size="sm" isPremium={isPremium} />
+            <HeartsBar hearts="{hearts}" maxHearts="{maxHearts}" size="sm" isPremium="{isPremium}"/>
             {streak > 0 && (
               <div className="flex items-center gap-1 px-2 py-1 bg-amber-500/20 rounded-lg">
-                <Star size={14} className="text-amber-400" fill="currentColor" />
+                <Star size="{14}" className="text-amber-400" fill="currentColor"/>
                 <span className="text-sm font-bold text-amber-400">{streak}</span>
               </div>
             )}
@@ -468,7 +482,6 @@ export default function VocabularyLabPage({ onBack }: Props) {
           </div>
         </div>
 
-        {/* Progress */}
         <div className="flex gap-2 mb-8">
           {challenges.map((_, i) => (
             <div
@@ -480,7 +493,7 @@ export default function VocabularyLabPage({ onBack }: Props) {
                   ? 'bg-violet-500/50 animate-pulse'
                   : 'bg-white/10'
               }`}
-            />
+            ></div>
           ))}
         </div>
 
@@ -495,7 +508,6 @@ export default function VocabularyLabPage({ onBack }: Props) {
           </div>
         ) : currentWord ? (
           <AnimatePresence mode="wait">
-            {/* LEARN PHASE */}
             {phase === 'learn' && (
               <motion.div
                 key="learn"
@@ -504,7 +516,6 @@ export default function VocabularyLabPage({ onBack }: Props) {
                 exit={{ opacity: 0, y: -20 }}
                 className="space-y-8"
               >
-                {/* Word Card */}
                 <div className="p-8 bg-gradient-to-br from-violet-500/20 to-purple-500/10 border border-violet-500/30 rounded-3xl text-center">
                   <div className="mb-4">
                     <span className="px-3 py-1 bg-white/10 rounded-full text-xs text-white/60">
@@ -526,7 +537,7 @@ export default function VocabularyLabPage({ onBack }: Props) {
                       onClick={() => speakWord(currentWord.word)}
                       className="p-2 bg-white/10 rounded-xl hover:bg-white/20 transition-colors"
                     >
-                      <Volume2 size={20} className="text-violet-400" />
+                      <Volume2 size="{20}" className="text-violet-400"/>
                     </button>
                   </div>
 
@@ -548,20 +559,18 @@ export default function VocabularyLabPage({ onBack }: Props) {
                   )}
                 </div>
 
-                {/* Start Challenge Button */}
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={startChallenges}
                   className="w-full py-4 bg-gradient-to-r from-violet-500 to-purple-500 rounded-xl font-bold text-lg flex items-center justify-center gap-2"
                 >
-                  <Target size={20} />
+                  <Target size="{20}"/>
                   Start Challenge to Learn
                 </motion.button>
               </motion.div>
             )}
 
-            {/* CHALLENGE PHASE */}
             {phase === 'challenge' && currentChallenge && (
               <motion.div
                 key={`challenge-${challengeIndex}`}
@@ -570,32 +579,28 @@ export default function VocabularyLabPage({ onBack }: Props) {
                 exit={{ opacity: 0, x: -20 }}
                 className="space-y-6"
               >
-                {/* Challenge Type Icon */}
                 <div className="flex items-center justify-center gap-2 mb-2">
-                  {currentChallenge.type === 'type-word' && <Keyboard size={20} className="text-violet-400" />}
-                  {currentChallenge.type === 'pick-definition' && <BookOpen size={20} className="text-violet-400" />}
-                  {currentChallenge.type === 'fill-blanks' && <Keyboard size={20} className="text-violet-400" />}
+                  {currentChallenge.type === 'type-word' && <Keyboard size="{20}" className="text-violet-400"/>}
+                  {currentChallenge.type === 'pick-definition' && <BookOpen size="{20}" className="text-violet-400"/>}
+                  {currentChallenge.type === 'fill-blanks' && <Keyboard size="{20}" className="text-violet-400"/>}
                   <span className="text-sm text-white/60 capitalize">
                     {currentChallenge.type.replace('-', ' ')}
                   </span>
                 </div>
 
-                {/* Instruction */}
                 <h3 className="text-xl font-bold text-center">{currentChallenge.instruction}</h3>
 
-                {/* Hint */}
                 {showHint && currentChallenge.hint && (
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-center"
                   >
-                    <Lightbulb size={16} className="text-amber-400 inline mr-2" />
+                    <Lightbulb size="{16}" className="text-amber-400 inline mr-2"/>
                     <span className="text-amber-300 text-sm">{currentChallenge.hint}</span>
                   </motion.div>
                 )}
 
-                {/* Input Area based on challenge type */}
                 {currentChallenge.type === 'pick-definition' ? (
                   <div className="space-y-3">
                     {currentChallenge.options?.map((option, i) => (
@@ -647,7 +652,6 @@ export default function VocabularyLabPage({ onBack }: Props) {
                   </div>
                 )}
 
-                {/* Result feedback */}
                 {isCorrect !== null && (
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
@@ -658,9 +662,9 @@ export default function VocabularyLabPage({ onBack }: Props) {
                   >
                     <div className="flex items-center gap-2">
                       {isCorrect ? (
-                        <CheckCircle2 size={20} className="text-emerald-400" />
+                        <CheckCircle2 size="{20}" className="text-emerald-400"/>
                       ) : (
-                        <XCircle size={20} className="text-red-400" />
+                        <XCircle size="{20}" className="text-red-400"/>
                       )}
                       <span className={`font-bold ${isCorrect ? 'text-emerald-400' : 'text-red-400'}`}>
                         {isCorrect ? 'Correct!' : 'Try again'}
@@ -684,7 +688,6 @@ export default function VocabularyLabPage({ onBack }: Props) {
                   </motion.div>
                 )}
 
-                {/* Action buttons */}
                 <div className="flex gap-3">
                   {isCorrect === null ? (
                     <>
@@ -693,7 +696,7 @@ export default function VocabularyLabPage({ onBack }: Props) {
                           onClick={() => setShowHint(true)}
                           className="py-3 px-4 bg-amber-500/20 text-amber-400 rounded-xl font-semibold"
                         >
-                          <Lightbulb size={18} />
+                          <Lightbulb size="{18}"/>
                         </button>
                       )}
                       <motion.button
@@ -724,7 +727,6 @@ export default function VocabularyLabPage({ onBack }: Props) {
               </motion.div>
             )}
 
-            {/* COMPLETE PHASE */}
             {phase === 'complete' && (
               <motion.div
                 key="complete"
