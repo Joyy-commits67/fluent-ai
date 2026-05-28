@@ -8,7 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useHearts } from '../hooks/useHearts';
 import { supabase } from '../lib/supabase';
 import { callGemini } from '../lib/gemini';
-import { addWordToLibrary, getLearnedItems } from '../lib/library'; // 👈 Connected global memory cache functions
+import { addWordToLibrary, getLearnedItems } from '../lib/library';
 import Confetti from '../components/ui/Confetti';
 import XPPopup from '../components/ui/XPPopup';
 import HeartsBar from '../components/ui/HeartsBar';
@@ -42,7 +42,6 @@ interface Props {
   onBack: () => void;
 }
 
-// 👈 Passed excludedWords straight down into the generation runtime loop
 async function generateNewWord(userLevel: number, excludedWords: string[] = []): Promise<NewWordData> {
   const difficulty = userLevel < 5 ? 'beginner' : userLevel < 15 ? 'intermediate' : 'advanced';
 
@@ -77,7 +76,7 @@ Respond ONLY in this exact JSON format:
   try {
     const response = await callGemini([{ role: 'user', parts: [{ text: prompt }] }]);
     const cleaned = response.replace(/```json|
-```/g, '').trim();
+```/g, '').trim(); // 👈 FIXED: Unified the expression back onto a single line to kill the Vite parser crash
     const parsed = JSON.parse(cleaned);
     
     if (!parsed.word || parsed.word.length < 4 || excludedWords.includes(parsed.word.toLowerCase().trim())) {
@@ -87,7 +86,6 @@ Respond ONLY in this exact JSON format:
   } catch (err) {
     console.error('Failed to generate dynamic word, routing variant options:', err);
     
-    // Safety Array to prevent looping "serendipity" indefinitely if the network exceptions trigger
     const backupPool: NewWordData[] = [
       { word: 'eloquent', meaning: 'Fluent or persuasive in speaking or writing', partOfSpeech: 'adjective', pronunciation: 'eh-luh-kwent', example: 'His graduation speech was incredibly eloquent.', synonyms: ['articulate', 'fluent'], difficulty: 'intermediate' },
       { word: 'resilient', meaning: 'Able to withstand or recover quickly from difficult conditions', partOfSpeech: 'adjective', pronunciation: 'rih-zil-yunt', example: 'The local businesses proved resilient during the storm.', synonyms: ['tough', 'strong'], difficulty: 'intermediate' },
@@ -95,7 +93,7 @@ Respond ONLY in this exact JSON format:
       { word: 'ubiquitous', meaning: 'Present, appearing, or found everywhere', partOfSpeech: 'adjective', pronunciation: 'yoo-bik-wih-tus', example: 'Smartphones have become completely ubiquitous in modern life.', synonyms: ['omnipresent', 'pervasive'], difficulty: 'advanced' }
     ];
 
-    const safeSelection = backupPool.find(b => !excludedWords.includes(b.word)) || backupPool[0];
+    const safeSelection = backupPool.find(b => !excludedWords.includes(b.word.toLowerCase().trim())) || backupPool[0];
     return safeSelection;
   }
 }
@@ -167,9 +165,8 @@ export default function VocabularyLabPage({ onBack }: Props) {
   const [showXpPopup, setShowXpPopup] = useState(false);
   const [xpEarned, setXpEarned] = useState(0);
   const [streak, setStreak] = useState(0);
-  const [excludedWords, setExcludedWords] = useState<string[]>([]); // 👈 Keeps persistent tab on learned items state
+  const [excludedWords, setExcludedWords] = useState<string[]>([]);
 
-  // Initial load hook to assemble master blacklist from user history
   useEffect(() => {
     if (user) {
       getLearnedItems(user.id, 'vocab').then((items) => {
@@ -189,7 +186,7 @@ export default function VocabularyLabPage({ onBack }: Props) {
     setShowHint(false);
 
     const userLevel = profile?.level || 1;
-    const wordData = await generateNewWord(userLevel, currentBlacklist); // Pass active cache arrays down
+    const wordData = await generateNewWord(userLevel, currentBlacklist);
     setCurrentWord(wordData);
 
     const generatedChallenges = await generateChallenges(wordData);
@@ -318,14 +315,12 @@ export default function VocabularyLabPage({ onBack }: Props) {
     if (user && currentWord) {
       const cleanTargetWord = currentWord.word.toLowerCase().trim();
 
-      // 1. Instantly log it to our dynamic anti-repetition filter module
       await addWordToLibrary(user.id, {
         wordOrPhrase: cleanTargetWord,
         contextSentence: currentWord.example,
         category: 'vocab'
       });
 
-      // 2. Append directly to local component memory stack so it takes effect without refreshing
       setExcludedWords((prev) => [...prev, cleanTargetWord]);
 
       const { data: existing } = await supabase
@@ -377,7 +372,6 @@ export default function VocabularyLabPage({ onBack }: Props) {
   };
 
   const learnNextWord = () => {
-    // Passes the latest up-to-date exclusion state straight into the reload handler
     loadNewWord([...excludedWords]);
   };
 
